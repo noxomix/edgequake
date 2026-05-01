@@ -12,6 +12,7 @@ import { getRuntimeConfig } from '@/lib/runtime-config';
 import { AppProviders } from '@/providers';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { connection } from 'next/server';
 import './globals.css';
 
 const inter = Inter({
@@ -25,11 +26,12 @@ export const metadata: Metadata = {
   keywords: ['RAG', 'Knowledge Graph', 'LLM', 'AI', 'Graph Database'],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  await connection();
   const runtimeConfig = getRuntimeConfig();
 
   return (
