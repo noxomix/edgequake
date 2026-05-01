@@ -37,6 +37,8 @@ Thumbs.db
 
 # Docker
 docker/
+!docker/licenses/
+!docker/licenses/**
 Dockerfile*
 .dockerignore
 
