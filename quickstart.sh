@@ -1145,7 +1145,7 @@ start_stack() {
     EDGEQUAKE_PUBLIC_HOST=$(hostname -I 2>/dev/null | awk '{print $1}' || \
                           hostname -i 2>/dev/null || \
                           ip route get 1 2>/dev/null | awk '{print $7}' | tr -d '\\n' || \
-                          echo "0.0.0.0")
+                          echo "localhost")
     case "$EDGEQUAKE_PUBLIC_HOST" in
       localhost|127.0.0.1|127.*.*.*|::1)
         EDGEQUAKE_PUBLIC_HOST=$(ip -4 addr show scope global 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1 || \
@@ -1155,6 +1155,10 @@ start_stack() {
     esac
   fi
   export EDGEQUAKE_PUBLIC_HOST
+  
+  # Set API URL to use the public host so frontend contacts API via correct IP
+  export EDGEQUAKE_API_URL="http://${EDGEQUAKE_PUBLIC_HOST}:${EDGEQUAKE_PORT}"
+
 
   # Write .env file for persistent configuration
   ui_info "Writing configuration to .env file..."
@@ -1210,7 +1214,7 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-edgequake_secret}
 # =============================================================================
 HOST=0.0.0.0
 EDGEQUAKE_PUBLIC_HOST=${EDGEQUAKE_PUBLIC_HOST}
-EDGEQUAKE_API_URL=http://${EDGEQUAKE_PUBLIC_HOST:-0.0.0.0}:${EDGEQUAKE_PORT}
+EDGEQUAKE_API_URL=${EDGEQUAKE_API_URL}
 INNER_EOF
 
   # Write API keys to .env if they were provided
