@@ -82,6 +82,8 @@ services:
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
+      - EDGEQUAKE_API_URL=${EDGEQUAKE_API_URL:-http://localhost:${EDGEQUAKE_PORT:-8080}}
+      - NEXT_PUBLIC_API_URL=${EDGEQUAKE_API_URL:-http://localhost:${EDGEQUAKE_PORT:-8080}}
     depends_on:
       edgequake:
         condition: service_healthy

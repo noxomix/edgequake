@@ -150,17 +150,16 @@ services:
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
-      # WHY EDGEQUAKE_API_URL (not NEXT_PUBLIC_API_URL):
-      # NEXT_PUBLIC_* variables are baked into the JS bundle at image build time
-      # and cannot be changed at container startup. EDGEQUAKE_API_URL is read at
-      # request time by the Next.js server component (layout.tsx → getRuntimeConfig)
-      # and injected into window.__EDGEQUAKE_RUNTIME_CONFIG__ so the browser picks
-      # it up correctly — no rebuild required.
-      #
+      # API URL configuration:
+      # EDGEQUAKE_API_URL is read at request time by Next.js server component
+      # and injected into window.__EDGEQUAKE_RUNTIME_CONFIG__ for the client.
+      # NEXT_PUBLIC_API_URL is a fallback - although it's baked at build time,
+      # we override it here to ensure client-side fallback matches.
       # Uses public host IP when set via quickstart.sh, falls back to localhost.
       # Set manually for remote access:
       #   EDGEQUAKE_API_URL=http://192.168.1.10:8080 docker compose ... up -d
       EDGEQUAKE_API_URL:  ${EDGEQUAKE_API_URL:-http://localhost:${EDGEQUAKE_PORT:-8080}}
+      NEXT_PUBLIC_API_URL: ${EDGEQUAKE_API_URL:-http://localhost:${EDGEQUAKE_PORT:-8080}}
     depends_on:
       api:
         condition: service_healthy
