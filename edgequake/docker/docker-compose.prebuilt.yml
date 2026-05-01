@@ -1,4 +1,5 @@
 # EdgeQuake — Full stack using prebuilt GHCR images
+# Fork note: defaults point at fork-owned images; override with EDGEQUAKE_*_IMAGE vars if needed.
 #
 # This is the fastest way to get EdgeQuake running locally.
 # The API, frontend, and PostgreSQL images are all pulled from GitHub Container
@@ -22,7 +23,7 @@ services:
   # Pulled from GHCR — no build step needed.
   # Multi-arch: linux/amd64 and linux/arm64 (Apple Silicon, AWS Graviton).
   edgequake:
-    image: ghcr.io/raphaelmansuy/edgequake:${EDGEQUAKE_VERSION:-latest}
+    image: ${EDGEQUAKE_IMAGE_REGISTRY:-ghcr.io}/${EDGEQUAKE_IMAGE_NAMESPACE:-noxomix}/${EDGEQUAKE_API_IMAGE:-edgequake}:${EDGEQUAKE_VERSION:-latest}
     container_name: edgequake
     restart: unless-stopped
     ports:
@@ -73,7 +74,7 @@ services:
   # If you deploy on a remote server set NEXT_PUBLIC_API_URL at build time and
   # rebuild the image, or use the build-from-source docker-compose.yml instead.
   frontend:
-    image: ghcr.io/raphaelmansuy/edgequake-frontend:${EDGEQUAKE_VERSION:-latest}
+    image: ${EDGEQUAKE_IMAGE_REGISTRY:-ghcr.io}/${EDGEQUAKE_IMAGE_NAMESPACE:-noxomix}/${EDGEQUAKE_FRONTEND_IMAGE:-edgequake-frontend}:${EDGEQUAKE_VERSION:-latest}
     container_name: edgequake-frontend
     restart: unless-stopped
     ports:
@@ -94,7 +95,7 @@ services:
 
   # ── PostgreSQL with pgvector + Apache AGE ─────────────────────────────────
   postgres:
-    image: ghcr.io/raphaelmansuy/edgequake-postgres:${EDGEQUAKE_VERSION:-latest}
+    image: ${EDGEQUAKE_IMAGE_REGISTRY:-ghcr.io}/${EDGEQUAKE_IMAGE_NAMESPACE:-noxomix}/${EDGEQUAKE_POSTGRES_IMAGE:-edgequake-postgres}:${EDGEQUAKE_VERSION:-latest}
     container_name: edgequake-postgres
     restart: unless-stopped
     ports:

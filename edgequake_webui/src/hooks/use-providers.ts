@@ -110,6 +110,7 @@ export function getProviderDisplayName(providerId: string): string {
     xai: "xAI",
     openrouter: "OpenRouter",
     azure: "Azure OpenAI",
+    scaleway: "Scaleway",
     minimax: "MiniMax",
     mock: "Mock (Dev)",
   };
@@ -129,6 +130,7 @@ export function getProviderIconClass(providerId: string): string {
     xai: "text-slate-700",
     openrouter: "text-indigo-600",
     azure: "text-sky-600",
+    scaleway: "text-sky-600",
     minimax: "text-teal-600",
     mock: "text-gray-500",
   };

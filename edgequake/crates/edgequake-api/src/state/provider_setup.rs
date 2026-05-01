@@ -20,12 +20,14 @@
 //! | `EDGEQUAKE_EMBEDDING_DIMENSION` | Dimension of the embedding vectors (overrides well-known table) | `768`, `1536` |
 //! | `EDGEQUAKE_EMBEDDING_BASE_URL` | Override base URL for embedding provider | `https://embed.example.com/v1` |
 //! | `EDGEQUAKE_EMBEDDING_API_KEY` | Override API key for embedding provider | `sk-embed-...` |
+//! | `SCW_SECRET_KEY` | Scaleway embedding API key when `EDGEQUAKE_EMBEDDING_PROVIDER=scaleway` | `...` |
 //! | `AZURE_OPENAI_API_KEY` | Azure embedding (auto-detected when `EDGEQUAKE_EMBEDDING_PROVIDER=azure`) | `sk-...` |
 //! | `AZURE_OPENAI_ENDPOINT` | Azure endpoint for embedding | `https://my-resource.openai.azure.com` |
 //! | `MISTRAL_API_KEY` | Mistral embedding (auto-detected when `EDGEQUAKE_EMBEDDING_PROVIDER=mistral`) | `...` |
 
 use std::sync::Arc;
 
+use crate::safety_limits::create_scaleway_embedding_provider;
 use edgequake_core::Workspace;
 use edgequake_llm::traits::EmbeddingProvider;
 use edgequake_llm::{OllamaProvider, OpenAIProvider, ProviderFactory};
@@ -69,6 +71,28 @@ pub fn resolve_embedding_provider(
                 provider_name.to_ascii_lowercase().as_str(),
                 "openai" | "openai-compatible" | "openai_compatible"
             );
+            let is_scaleway = provider_name.eq_ignore_ascii_case("scaleway");
+
+            if is_scaleway {
+                match create_scaleway_embedding_provider(&model, dimension) {
+                    Ok(provider) => {
+                        tracing::info!(
+                            provider = %provider_name,
+                            model = %model,
+                            dimension,
+                            "Embedding provider overridden via Scaleway"
+                        );
+                        return provider;
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            provider = %provider_name,
+                            "Failed to create Scaleway embedding provider; using default"
+                        );
+                    }
+                }
+            }
 
             if is_openai_compatible && (has_custom_base_url || has_custom_api_key) {
                 // Use dedicated credentials only for OpenAI-compatible embedding providers.
@@ -215,6 +239,7 @@ fn embedding_model_for_provider(provider_name: &str) -> String {
 fn provider_specific_embedding_env_key(provider_name: &str) -> Option<&'static str> {
     match provider_name.to_ascii_lowercase().as_str() {
         "mistral" => Some("MISTRAL_EMBEDDING_MODEL"),
+        "scaleway" => Some("SCALEWAY_EMBEDDING_MODEL"),
         "openai" | "openai-compatible" | "openai_compatible" => Some("OPENAI_EMBEDDING_MODEL"),
         "ollama" => Some("OLLAMA_EMBEDDING_MODEL"),
         "lmstudio" | "lm-studio" | "lm_studio" => Some("LMSTUDIO_EMBEDDING_MODEL"),
@@ -481,6 +506,18 @@ mod tests {
         );
     }
 
+    #[test]
+    #[serial]
+    fn embedding_model_for_provider_scaleway_default() {
+        std::env::remove_var("SCALEWAY_EMBEDDING_MODEL");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_MODEL");
+
+        assert_eq!(
+            embedding_model_for_provider("scaleway"),
+            "qwen/qwen3-embedding-8b"
+        );
+    }
+
     /// OLLAMA_EMBEDDING_MODEL is NOT picked up for the Mistral provider.
     /// This test codifies the fix for the .env bleed-through bug.
     #[test]
@@ -507,6 +544,10 @@ mod tests {
         std::env::remove_var("EDGEQUAKE_EMBEDDING_DIMENSION");
         assert_eq!(embedding_dimension_for_model_and_env("mistral-embed"), 1024);
         assert_eq!(
+            embedding_dimension_for_model_and_env("qwen/qwen3-embedding-8b"),
+            4096
+        );
+        assert_eq!(
             embedding_dimension_for_model_and_env("codestral-embed"),
             1024
         );
@@ -532,5 +573,24 @@ mod tests {
             "Env override must win over well-known table"
         );
         std::env::remove_var("EDGEQUAKE_EMBEDDING_DIMENSION");
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_embedding_provider_can_construct_scaleway_with_scw_key() {
+        std::env::set_var("EDGEQUAKE_EMBEDDING_PROVIDER", "scaleway");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_MODEL");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_DIMENSION");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_API_KEY");
+        std::env::set_var("SCW_SECRET_KEY", "test-scaleway-key");
+
+        let result = resolve_embedding_provider(mock_embedding());
+
+        assert_eq!(result.name(), "scaleway");
+        assert_eq!(result.model(), "qwen/qwen3-embedding-8b");
+        assert_eq!(result.dimension(), 4096);
+
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_PROVIDER");
+        std::env::remove_var("SCW_SECRET_KEY");
     }
 }

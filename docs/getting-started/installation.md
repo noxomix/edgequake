@@ -50,8 +50,8 @@ Before installing, ensure you have:
 
 ```bash
 # Clone the repository
-git clone https://github.com/raphaelmansuy/edgequake.git
-cd edgequake
+git clone https://github.com/noxomix/edgequake-fork.git
+cd edgequake-fork
 
 # Start everything (PostgreSQL + Backend + Frontend)
 make dev
@@ -83,8 +83,8 @@ open <http://localhost:3000>
 
 ```bash
 # Clone and enter
-git clone https://github.com/raphaelmansuy/edgequake.git
-cd edgequake
+git clone https://github.com/noxomix/edgequake-fork.git
+cd edgequake-fork
 
 # Start backend with PostgreSQL (required since v0.4.0)
 make backend-bg
@@ -106,8 +106,8 @@ curl http://localhost:8080/health
 
 ```bash
 # Clone
-git clone https://github.com/raphaelmansuy/edgequake.git
-cd edgequake
+git clone https://github.com/noxomix/edgequake-fork.git
+cd edgequake-fork
 
 # Build release binary
 cd edgequake
@@ -220,7 +220,7 @@ docker run -d \
   -e POSTGRES_PASSWORD=edgequake \
   -e POSTGRES_DB=edgequake \
   -p 5432:5432 \
-  ghcr.io/raphaelmansuy/edgequake-postgres:latest
+  ghcr.io/noxomix/edgequake-postgres:latest
 
 # Set connection string
 export DATABASE_URL="postgresql://postgres:edgequake@localhost:5432/edgequake"

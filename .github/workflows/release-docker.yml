@@ -54,7 +54,7 @@ jobs:
           file: edgequake/docker/Dockerfile
           push: true
           platforms: linux/amd64
-          tags: ghcr.io/${{ github.repository }}:${{ needs.meta.outputs.version }}-amd64
+          tags: ghcr.io/${{ github.repository_owner }}/edgequake:${{ needs.meta.outputs.version }}-amd64
           cache-from: type=gha,scope=amd64
           cache-to:   type=gha,scope=amd64,mode=max
 
@@ -80,7 +80,7 @@ jobs:
           file: edgequake/docker/Dockerfile
           push: true
           platforms: linux/arm64
-          tags: ghcr.io/${{ github.repository }}:${{ needs.meta.outputs.version }}-arm64
+          tags: ghcr.io/${{ github.repository_owner }}/edgequake:${{ needs.meta.outputs.version }}-arm64
           cache-from: type=gha,scope=arm64
           cache-to:   type=gha,scope=arm64,mode=max
 
@@ -97,7 +97,7 @@ jobs:
 
       - name: Create and push multi-arch manifest
         env:
-          IMAGE: ghcr.io/${{ github.repository }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/edgequake
           VERSION: ${{ needs.meta.outputs.version }}
         run: |
           docker buildx imagetools create \
@@ -109,7 +109,7 @@ jobs:
       - name: Inspect final manifest
         run: |
           docker buildx imagetools inspect \
-            "ghcr.io/${{ github.repository }}:${{ needs.meta.outputs.version }}"
+            "ghcr.io/${{ github.repository_owner }}/edgequake:${{ needs.meta.outputs.version }}"
 
   # ── Build frontend amd64 — native ubuntu-latest runner ────────────────────────
   build-frontend-amd64:
@@ -300,12 +300,12 @@ jobs:
 
           \`\`\`bash
           # Interactive one-command install (Docker only, no git clone)
-          curl -fsSL https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main/quickstart.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${TAG}/quickstart.sh | sh
           \`\`\`
 
           Or with plain Docker Compose:
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main/docker-compose.quickstart.yml \\
+          curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${TAG}/docker-compose.quickstart.yml \\
             -o docker-compose.quickstart.yml
           docker compose -f docker-compose.quickstart.yml up -d
           # → Web UI:  http://localhost:3000
@@ -324,11 +324,11 @@ jobs:
 
           | Image | Architecture |
           |-------|-------------|
-          | \`ghcr.io/raphaelmansuy/edgequake:${VERSION}\` | linux/amd64, linux/arm64 |
-          | \`ghcr.io/raphaelmansuy/edgequake-frontend:${VERSION}\` | linux/amd64, linux/arm64 |
-          | \`ghcr.io/raphaelmansuy/edgequake-postgres:${VERSION}\` | linux/amd64, linux/arm64 |
+          | \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/edgequake:${VERSION}\` | linux/amd64, linux/arm64 |
+          | \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/edgequake-frontend:${VERSION}\` | linux/amd64, linux/arm64 |
+          | \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/edgequake-postgres:${VERSION}\` | linux/amd64, linux/arm64 |
 
-          Full CHANGELOG: https://github.com/raphaelmansuy/edgequake/blob/edgequake-main/CHANGELOG.md"
+          Full CHANGELOG: https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/CHANGELOG.md"
 
           gh release create "$TAG" \
             --title "EdgeQuake $TAG" \

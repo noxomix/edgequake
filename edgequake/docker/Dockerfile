@@ -1,4 +1,5 @@
 # EdgeQuake Dockerfile
+# Fork note: includes bundled license texts for redistributed container artifacts.
 # Multi-stage build for minimal image size
 # Multi-platform: supports linux/amd64, linux/arm64 (macOS Apple Silicon, AWS Graviton, etc.)
 # Build: docker buildx build --platform linux/amd64,linux/arm64 -t edgequake .
@@ -36,6 +37,7 @@ COPY crates/ crates/
 COPY src/ src/
 COPY migrations/ migrations/
 COPY .sqlx .sqlx/
+COPY docker/licenses/ docker/licenses/
 # WHY: models.toml defines available LLM providers/models (gpt-5.4, claude-sonnet-4-6,
 # gemma4, etc.). The binary falls back to built-in defaults (edgequake-llm v0.5.1) which
 # only include gpt-4o and gpt-4o-mini — the new models are only in models.toml.
@@ -79,9 +81,10 @@ COPY --from=builder /app/target/release/edgequake /usr/local/bin/
 # (CWD=/app, see WORKDIR above). Without this, the binary falls back to the compiled-in
 # defaults which lack the v0.9.8 models (gpt-5.4, claude-sonnet-4-6, gemma4).
 COPY --from=builder /app/models.toml /app/models.toml
+COPY --from=builder /app/docker/licenses /licenses
 
 # Set ownership
-RUN chown edgequake:edgequake /usr/local/bin/edgequake /app/models.toml
+RUN chown -R edgequake:edgequake /usr/local/bin/edgequake /app/models.toml /licenses
 
 # Switch to non-root user
 USER edgequake

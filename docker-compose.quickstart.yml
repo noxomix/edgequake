@@ -1,4 +1,5 @@
 # EdgeQuake — One-Command Quickstart
+# Fork note: defaults point at fork-owned container images and remain overrideable by environment.
 #
 # Pulls all three services from prebuilt GHCR images.
 # No Rust toolchain, no Node.js, no local build step required.
@@ -15,10 +16,10 @@
 #   Swagger → http://localhost:8080/swagger-ui
 #   Health  → http://localhost:8080/health
 #
-# LLM provider (default: Ollama on the host at port 11434)
-# To use OpenAI:
-#   EDGEQUAKE_LLM_PROVIDER=openai OPENAI_API_KEY=sk-... \
-#     docker compose -f docker-compose.quickstart.yml up -d
+# Provider quick example:
+#   EDGEQUAKE_LLM_PROVIDER=mistral EDGEQUAKE_EMBEDDING_PROVIDER=scaleway \
+#   EDGEQUAKE_VISION_PROVIDER=openai MISTRAL_API_KEY=... OPENAI_API_KEY=sk-... \
+#   SCW_SECRET_KEY=... docker compose -f docker-compose.quickstart.yml up -d
 #
 # Pin to a specific release:
 #   EDGEQUAKE_VERSION=0.10.6 docker compose -f docker-compose.quickstart.yml up -d
@@ -26,7 +27,7 @@
 services:
   # ── PostgreSQL with pgvector + Apache AGE ──────────────────────────────────
   postgres:
-    image: ghcr.io/raphaelmansuy/edgequake-postgres:${EDGEQUAKE_VERSION:-latest}
+    image: ${EDGEQUAKE_IMAGE_REGISTRY:-ghcr.io}/${EDGEQUAKE_IMAGE_NAMESPACE:-noxomix}/${EDGEQUAKE_POSTGRES_IMAGE:-edgequake-postgres}:${EDGEQUAKE_VERSION:-latest}
     container_name: edgequake-postgres
     restart: unless-stopped
     shm_size: '256m'
@@ -47,7 +48,7 @@ services:
 
   # ── EdgeQuake API ──────────────────────────────────────────────────────────
   api:
-    image: ghcr.io/raphaelmansuy/edgequake:${EDGEQUAKE_VERSION:-latest}
+    image: ${EDGEQUAKE_IMAGE_REGISTRY:-ghcr.io}/${EDGEQUAKE_IMAGE_NAMESPACE:-noxomix}/${EDGEQUAKE_API_IMAGE:-edgequake}:${EDGEQUAKE_VERSION:-latest}
     container_name: edgequake-api
     restart: unless-stopped
     ports:
@@ -93,9 +94,19 @@ services:
       # Override only when using a custom OpenAI-compatible endpoint
       # (e.g. OPENAI_BASE_URL=http://localhost:11434/v1 for Ollama in compat mode).
       OPENAI_BASE_URL:              ${OPENAI_BASE_URL:-}
+      EDGEQUAKE_CHAT_API_KEY:       ${EDGEQUAKE_CHAT_API_KEY:-}
+      EDGEQUAKE_CHAT_BASE_URL:      ${EDGEQUAKE_CHAT_BASE_URL:-}
       ANTHROPIC_API_KEY:            ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY:               ${GEMINI_API_KEY:-}
       MISTRAL_API_KEY:              ${MISTRAL_API_KEY:-}
+      XAI_API_KEY:                  ${XAI_API_KEY:-}
+      OPENROUTER_API_KEY:           ${OPENROUTER_API_KEY:-}
+      MINIMAX_API_KEY:              ${MINIMAX_API_KEY:-}
+      AZURE_OPENAI_API_KEY:         ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT:        ${AZURE_OPENAI_ENDPOINT:-}
+      GOOGLE_CLOUD_PROJECT:         ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_ACCESS_TOKEN:          ${GOOGLE_ACCESS_TOKEN:-}
+      SCW_SECRET_KEY:               ${SCW_SECRET_KEY:-}
       # WHY host.docker.internal (NOT localhost):
       #   Docker containers have their own network namespace. 'localhost' inside
       #   a container refers to the container itself, NOT to the host where Ollama
@@ -107,6 +118,10 @@ services:
       #   '127.x.x.x' — use 'host.docker.internal' or a real IP/hostname.
       #   quickstart.sh auto-translates loopback addresses when launching.
       OLLAMA_HOST:                  ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      LMSTUDIO_HOST:                ${LMSTUDIO_HOST:-http://host.docker.internal:1234}
+      EDGEQUAKE_EMBEDDING_API_KEY:  ${EDGEQUAKE_EMBEDDING_API_KEY:-}
+      EDGEQUAKE_EMBEDDING_BASE_URL: ${EDGEQUAKE_EMBEDDING_BASE_URL:-}
+      EDGEQUAKE_EMBEDDING_DIMENSION: ${EDGEQUAKE_EMBEDDING_DIMENSION:-}
       PDFIUM_AUTO_CACHE_DIR:        /tmp/edgequake-pdfium-cache
       RUST_LOG:                     ${RUST_LOG:-info}
     extra_hosts:
@@ -127,7 +142,7 @@ services:
 
   # ── Next.js Web UI ─────────────────────────────────────────────────────────
   frontend:
-    image: ghcr.io/raphaelmansuy/edgequake-frontend:${EDGEQUAKE_VERSION:-latest}
+    image: ${EDGEQUAKE_IMAGE_REGISTRY:-ghcr.io}/${EDGEQUAKE_IMAGE_NAMESPACE:-noxomix}/${EDGEQUAKE_FRONTEND_IMAGE:-edgequake-frontend}:${EDGEQUAKE_VERSION:-latest}
     container_name: edgequake-frontend
     restart: unless-stopped
     ports:

@@ -454,6 +454,9 @@ async fn check_provider_health(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgequake_llm::model_config::ModelsConfig;
+    use serial_test::serial;
+    use std::sync::Arc;
 
     #[test]
     fn test_model_card_to_response() {
@@ -484,5 +487,47 @@ mod tests {
         assert_eq!(response.capabilities.context_length, 4096);
         assert!(response.capabilities.supports_function_calling);
         assert!(!response.capabilities.supports_vision);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn embedding_models_include_scaleway_qwen3() {
+        let mut state = AppState::test_state();
+        state.models_config = Arc::new(load_repo_models_config());
+        let response = list_embedding_models(State(state))
+            .await
+            .expect("embedding model endpoint should succeed")
+            .0;
+
+        assert!(response
+            .models
+            .iter()
+            .any(|item| item.provider == "scaleway"
+                && item.model.name == "qwen/qwen3-embedding-8b"
+                && item.dimension == 4096));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn llm_models_include_mistral_small() {
+        let mut state = AppState::test_state();
+        state.models_config = Arc::new(load_repo_models_config());
+        let response = list_llm_models(State(state))
+            .await
+            .expect("LLM model endpoint should succeed")
+            .0;
+
+        assert!(response
+            .models
+            .iter()
+            .any(|item| item.provider == "mistral" && item.model.name == "mistral-small-latest"));
+    }
+
+    fn load_repo_models_config() -> ModelsConfig {
+        let path = format!("{}/../../models.toml", env!("CARGO_MANIFEST_DIR"));
+        std::env::set_var("EDGEQUAKE_MODELS_CONFIG", path);
+        let config = ModelsConfig::load().expect("repo models.toml should load");
+        std::env::remove_var("EDGEQUAKE_MODELS_CONFIG");
+        config
     }
 }

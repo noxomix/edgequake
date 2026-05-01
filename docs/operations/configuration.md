@@ -146,6 +146,7 @@ DATABASE_URL="postgresql://edgequake:pass@pgbouncer:6432/edgequake"
 | `EDGEQUAKE_EMBEDDING_PROVIDER`  | String  | `ollama` | Override embedding provider type (hybrid mode) |
 | `EDGEQUAKE_EMBEDDING_MODEL`     | String  | None     | Override embedding model name                  |
 | `EDGEQUAKE_EMBEDDING_DIMENSION` | Integer | `768`    | Override embedding vector dimension            |
+| `SCW_SECRET_KEY`                | String  | None     | Scaleway API key for `scaleway` embeddings     |
 
 ### Compatibility aliases
 
@@ -169,7 +170,7 @@ Run a different provider or Ollama instance for embeddings vs. LLM inference:
 | Variable                        | Type    | Default                | Description                                         |
 | ------------------------------- | ------- | ---------------------- | --------------------------------------------------- |
 | `OLLAMA_EMBEDDING_HOST`         | String  | value of `OLLAMA_HOST` | Dedicated Ollama host for embeddings                |
-| `EDGEQUAKE_EMBEDDING_PROVIDER`  | String  | (same as LLM)          | Explicit embedding provider (`ollama`, `openai`, …) |
+| `EDGEQUAKE_EMBEDDING_PROVIDER`  | String  | (same as LLM)          | Explicit embedding provider (`ollama`, `openai`, `scaleway`, …) |
 | `EDGEQUAKE_EMBEDDING_MODEL`     | String  | provider default       | Model for the embedding override                    |
 | `EDGEQUAKE_EMBEDDING_DIMENSION` | Integer | `768`                  | Vector dimension for the embedding override         |
 
@@ -183,6 +184,20 @@ export OPENAI_API_KEY=sk-...
 export OLLAMA_EMBEDDING_HOST=http://gpu-box:11434
 export OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 ```
+
+**Example — Mistral for LLM, Scaleway Qwen3 for embeddings:**
+
+```bash
+export EDGEQUAKE_LLM_PROVIDER=mistral
+export EDGEQUAKE_LLM_MODEL=mistral-small-latest
+export MISTRAL_API_KEY=...
+
+export EDGEQUAKE_EMBEDDING_PROVIDER=scaleway
+export EDGEQUAKE_EMBEDDING_MODEL=qwen/qwen3-embedding-8b
+export SCW_SECRET_KEY=...
+```
+
+Scaleway defaults to `https://api.scaleway.ai/v1` and the Qwen3 8B embedding dimension is auto-detected as `4096`.
 
 ### Pipeline Timeout & Concurrency (fixes [#194](https://github.com/raphaelmansuy/edgequake/issues/194))
 

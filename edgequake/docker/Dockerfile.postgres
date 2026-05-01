@@ -1,5 +1,8 @@
 # PostgreSQL with pgvector and Apache AGE extensions
+# Fork note: includes bundled third-party license texts for redistributed extensions.
 FROM postgres:16-bookworm
+
+COPY licenses/ /licenses/
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \

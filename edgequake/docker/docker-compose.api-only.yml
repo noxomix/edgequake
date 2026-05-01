@@ -1,4 +1,5 @@
 # EdgeQuake — API only (bring your own PostgreSQL)
+# Fork note: defaults point at the fork-owned API image.
 #
 # Use this file when you have an existing PostgreSQL instance with the
 # pgvector and apache_age extensions already installed.
@@ -14,7 +15,7 @@
 
 services:
   edgequake:
-    image: ghcr.io/raphaelmansuy/edgequake:latest
+    image: ${EDGEQUAKE_IMAGE_REGISTRY:-ghcr.io}/${EDGEQUAKE_IMAGE_NAMESPACE:-noxomix}/${EDGEQUAKE_API_IMAGE:-edgequake}:${EDGEQUAKE_VERSION:-latest}
     # Alternatively, build from source:
     # build:
     #   context: ..

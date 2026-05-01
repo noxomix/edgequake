@@ -289,11 +289,14 @@ impl Workspace {
     ///
     /// Called when the user has not explicitly configured an embedding model.
     pub fn default_embedding_model_for_provider(provider: &str) -> String {
-        match provider {
+        match provider.to_ascii_lowercase().as_str() {
             "openai" | "openai-compatible" => "text-embedding-3-small".to_string(),
             "lmstudio" => "nomic-embed-text".to_string(),
             // Mistral native embedding — 1024 dimensions, optimised for retrieval.
             "mistral" => "mistral-embed".to_string(),
+            // Scaleway Generative APIs expose Qwen3 8B embeddings via an
+            // OpenAI-compatible /v1/embeddings endpoint.
+            "scaleway" => "qwen/qwen3-embedding-8b".to_string(),
             // ollama and everything else: use the compiled-in Ollama default.
             _ => DEFAULT_EMBEDDING_MODEL.to_string(),
         }
@@ -309,6 +312,8 @@ impl Workspace {
     pub fn detect_provider_from_model(model: &str) -> String {
         if model.starts_with("text-embedding") || model.starts_with("ada") {
             "openai".to_string()
+        } else if model == "qwen3-embedding-8b" || model == "qwen/qwen3-embedding-8b" {
+            "scaleway".to_string()
         } else if model.contains(':') {
             // Ollama uses "model:tag" format
             "ollama".to_string()
@@ -340,6 +345,9 @@ impl Workspace {
             // Mistral embed returns 1024-dimensional vectors.
             "mistral-embed" | "mistral-embed-2312" | "codestral-embed" | "codestral-embed-2505" => {
                 Some(1024)
+            }
+            "qwen/qwen3-embedding-8b" | "qwen3-embedding-8b" | "Qwen/Qwen3-Embedding-8B" => {
+                Some(4096)
             }
             "mxbai-embed-large" | "mxbai-embed-large:latest" => Some(1024),
             _ if model.contains("768") => Some(768),
@@ -621,6 +629,34 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_default_embedding_model_scaleway() {
+        assert_eq!(
+            Workspace::default_embedding_model_for_provider("scaleway"),
+            "qwen/qwen3-embedding-8b"
+        );
+    }
+
+    #[test]
+    fn test_scaleway_qwen3_embedding_dimension_aliases() {
+        assert_eq!(
+            Workspace::known_embedding_dimension("qwen/qwen3-embedding-8b"),
+            Some(4096)
+        );
+        assert_eq!(
+            Workspace::known_embedding_dimension("qwen3-embedding-8b"),
+            Some(4096)
+        );
+    }
+
+    #[test]
+    fn test_qwen3_embedding_model_detects_scaleway_provider() {
+        assert_eq!(
+            Workspace::detect_provider_from_model("qwen/qwen3-embedding-8b"),
+            "scaleway"
+        );
+    }
+
     // ── default_llm_config env-var resolution (issue #147) ────────────────
 
     #[test]
@@ -715,6 +751,25 @@ mod tests {
         assert_eq!(provider, "openai");
         assert_eq!(model, "text-embedding-3-small");
         assert_eq!(dim, 1536);
+    }
+
+    #[test]
+    fn test_embedding_config_supports_scaleway_default() {
+        let _guard = lock_env_tests();
+        std::env::remove_var("EDGEQUAKE_DEFAULT_EMBEDDING_PROVIDER");
+        std::env::remove_var("EDGEQUAKE_DEFAULT_EMBEDDING_MODEL");
+        std::env::remove_var("EDGEQUAKE_DEFAULT_EMBEDDING_DIMENSION");
+        std::env::set_var("EDGEQUAKE_EMBEDDING_PROVIDER", "scaleway");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_MODEL");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_DIMENSION");
+
+        let (model, provider, dim) = Workspace::default_embedding_config();
+
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_PROVIDER");
+
+        assert_eq!(provider, "scaleway");
+        assert_eq!(model, "qwen/qwen3-embedding-8b");
+        assert_eq!(dim, 4096);
     }
 
     /// Regression test: Docker Compose expands `${VAR:-}` to empty string when

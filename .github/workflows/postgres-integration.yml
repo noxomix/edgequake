@@ -271,7 +271,7 @@ jobs:
 
     services:
       postgres:
-        image: ghcr.io/raphaelmansuy/edgequake-postgres:latest
+        image: ghcr.io/${{ github.repository_owner }}/edgequake-postgres:latest
         env:
           POSTGRES_DB: edgequake_test
           POSTGRES_USER: edgequake_test

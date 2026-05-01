@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import packageInfo from '../../../package.json';
 import { getAppVersion } from '../app-version';
 
 describe('getAppVersion', () => {
   it('uses the current package version and always prefixes it with v', () => {
-    expect(getAppVersion()).toBe('v0.10.7');
+    expect(getAppVersion()).toBe(`v${packageInfo.version}`);
   });
 
   it('normalizes a provided version string without duplicating the prefix', () => {

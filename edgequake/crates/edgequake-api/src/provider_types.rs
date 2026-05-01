@@ -404,8 +404,28 @@ impl AvailableProvidersResponse {
             },
         ];
 
-        // Embedding providers share the same options
-        let embedding_providers = llm_providers.clone();
+        let mut embedding_providers = llm_providers.clone();
+        embedding_providers.push(ProviderInfo {
+            id: "scaleway".to_string(),
+            name: "Scaleway".to_string(),
+            description: "Scaleway Generative APIs embeddings (OpenAI-compatible)".to_string(),
+            available: std::env::var("SCW_SECRET_KEY")
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false),
+            config_requirements: vec![ConfigRequirement {
+                env_var: "SCW_SECRET_KEY".to_string(),
+                required: true,
+                description: "Scaleway API secret key".to_string(),
+                satisfied: std::env::var("SCW_SECRET_KEY")
+                    .map(|v| !v.trim().is_empty())
+                    .unwrap_or(false),
+            }],
+            default_models: DefaultModels {
+                chat_model: "".to_string(),
+                embedding_model: "qwen/qwen3-embedding-8b".to_string(),
+                embedding_dimension: 4096,
+            },
+        });
 
         Self {
             llm_providers,
@@ -473,5 +493,32 @@ impl ProviderStatusResponse {
                 uptime_seconds: uptime,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn scaleway_is_advertised_as_embedding_provider_only() {
+        std::env::remove_var("SCW_SECRET_KEY");
+
+        let providers = AvailableProvidersResponse::build("mistral", "scaleway");
+
+        assert!(providers
+            .embedding_providers
+            .iter()
+            .any(|provider| provider.id == "scaleway"
+                && provider.default_models.embedding_model == "qwen/qwen3-embedding-8b"
+                && provider.default_models.embedding_dimension == 4096));
+        assert!(!providers
+            .llm_providers
+            .iter()
+            .any(|provider| provider.id == "scaleway"));
+        assert_eq!(providers.active_llm_provider, "mistral");
+        assert_eq!(providers.active_embedding_provider, "scaleway");
     }
 }

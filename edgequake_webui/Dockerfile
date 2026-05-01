@@ -1,4 +1,5 @@
 # EdgeQuake Frontend Dockerfile
+# Fork note: includes bundled license texts for redistributed container artifacts.
 # Multi-stage build for Next.js application
 
 # ============================================
@@ -77,6 +78,7 @@ RUN npm install -g pnpm && pnpm install --prod --frozen-lockfile
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --chown=nextjs:nodejs edgequake/docker/licenses /licenses
 
 # Switch to non-root user
 USER nextjs

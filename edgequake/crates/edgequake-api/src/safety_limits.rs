@@ -288,6 +288,60 @@ impl SafetyLimitedEmbeddingProviderWrapper {
     }
 }
 
+/// Identity/dimension override for OpenAI-compatible embedding gateways.
+///
+/// Some gateways, such as Scaleway Generative APIs, are protocol-compatible
+/// with OpenAI but have their own provider identity and model dimensions.
+struct NamedEmbeddingProvider {
+    inner: Arc<dyn EmbeddingProvider>,
+    name: String,
+    model: String,
+    dimension: usize,
+}
+
+impl NamedEmbeddingProvider {
+    fn new(
+        inner: Arc<dyn EmbeddingProvider>,
+        name: impl Into<String>,
+        model: impl Into<String>,
+        dimension: usize,
+    ) -> Self {
+        Self {
+            inner,
+            name: name.into(),
+            model: model.into(),
+            dimension,
+        }
+    }
+}
+
+#[async_trait]
+impl EmbeddingProvider for NamedEmbeddingProvider {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn model(&self) -> &str {
+        &self.model
+    }
+
+    fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    fn max_tokens(&self) -> usize {
+        self.inner.max_tokens()
+    }
+
+    fn max_batch_size(&self) -> usize {
+        self.inner.max_batch_size()
+    }
+
+    async fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        self.inner.embed(texts).await
+    }
+}
+
 #[async_trait]
 impl EmbeddingProvider for SafetyLimitedEmbeddingProviderWrapper {
     fn name(&self) -> &str {
@@ -354,6 +408,45 @@ fn check_api_key(provider_name: &str) -> Result<()> {
     Ok(())
 }
 
+fn non_empty_env(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+}
+
+fn scaleway_api_key() -> Result<String> {
+    non_empty_env("EDGEQUAKE_EMBEDDING_API_KEY")
+        .or_else(|| non_empty_env("SCW_SECRET_KEY"))
+        .ok_or_else(|| {
+            LlmError::ConfigError(
+                "SCW_SECRET_KEY is not set. To use the Scaleway embedding provider, \
+                 set SCW_SECRET_KEY or EDGEQUAKE_EMBEDDING_API_KEY and restart the server."
+                    .to_string(),
+            )
+        })
+}
+
+fn scaleway_embedding_base_url() -> String {
+    non_empty_env("EDGEQUAKE_EMBEDDING_BASE_URL")
+        .or_else(|| non_empty_env("SCALEWAY_AI_BASE_URL"))
+        .unwrap_or_else(|| "https://api.scaleway.ai/v1".to_string())
+}
+
+pub fn create_scaleway_embedding_provider(
+    model: &str,
+    dimension: usize,
+) -> Result<Arc<dyn EmbeddingProvider>> {
+    let api_key = scaleway_api_key()?;
+    let base_url = scaleway_embedding_base_url();
+    let inner: Arc<dyn EmbeddingProvider> = Arc::new(
+        edgequake_llm::OpenAIProvider::compatible(api_key, base_url).with_embedding_model(model),
+    );
+
+    Ok(Arc::new(NamedEmbeddingProvider::new(
+        inner, "scaleway", model, dimension,
+    )))
+}
+
 /// Create a safety-limited LLM provider from workspace configuration.
 pub fn create_safe_llm_provider(provider_name: &str, model: &str) -> Result<Arc<dyn LLMProvider>> {
     check_api_key(provider_name)?;
@@ -396,6 +489,23 @@ pub fn create_safe_embedding_provider(
     model: &str,
     dimension: usize,
 ) -> Result<Arc<dyn EmbeddingProvider>> {
+    if provider_name.eq_ignore_ascii_case("scaleway") {
+        let inner = create_scaleway_embedding_provider(model, dimension)?;
+        let config = SafetyLimitsConfig::from_env();
+
+        tracing::info!(
+            provider = provider_name,
+            model = model,
+            dimension = dimension,
+            timeout_secs = config.timeout.as_secs(),
+            "Creating safety-limited Scaleway embedding provider"
+        );
+
+        return Ok(Arc::new(SafetyLimitedEmbeddingProviderWrapper::new(
+            inner, config,
+        )));
+    }
+
     // FIX #163: If embedding-specific env vars are set and provider is openai-compatible,
     // create the provider with dedicated credentials.
     let is_openai_compatible = matches!(
@@ -659,5 +769,62 @@ pub fn default_model_for_provider(provider_name: &str) -> &'static str {
         "minimax" => "MiniMax-M2.7",
         "mock" => "mock-model",
         _ => "gpt-4.1-nano",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn mistral_llm_reports_mistral_key_error() {
+        std::env::remove_var("MISTRAL_API_KEY");
+
+        let err = match create_safe_llm_provider("mistral", "mistral-small-latest") {
+            Ok(_) => panic!("missing MISTRAL_API_KEY should fail"),
+            Err(err) => err,
+        };
+
+        assert!(
+            err.to_string().contains("MISTRAL_API_KEY"),
+            "error should identify the missing LLM key, got: {err}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn scaleway_embedding_reports_scaleway_key_error() {
+        std::env::remove_var("SCW_SECRET_KEY");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_API_KEY");
+
+        let err = match create_safe_embedding_provider("scaleway", "qwen/qwen3-embedding-8b", 4096)
+        {
+            Ok(_) => panic!("missing SCW_SECRET_KEY should fail"),
+            Err(err) => err,
+        };
+
+        assert!(
+            err.to_string().contains("SCW_SECRET_KEY"),
+            "error should identify the missing embedding key, got: {err}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn scaleway_embedding_provider_uses_separate_identity_and_dimension() {
+        std::env::set_var("SCW_SECRET_KEY", "test-scaleway-key");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_API_KEY");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_BASE_URL");
+
+        let provider = create_safe_embedding_provider("scaleway", "qwen/qwen3-embedding-8b", 4096)
+            .expect("Scaleway embedding provider should be constructible with SCW_SECRET_KEY");
+
+        assert_eq!(provider.name(), "scaleway");
+        assert_eq!(provider.model(), "qwen/qwen3-embedding-8b");
+        assert_eq!(provider.dimension(), 4096);
+
+        std::env::remove_var("SCW_SECRET_KEY");
     }
 }

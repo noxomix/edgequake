@@ -411,7 +411,7 @@ image_per_unit = 0.0
 [[providers]]
 name = "mistral"
 display_name = "Mistral AI"
-type = "openai_compatible"
+type = "openaicompatible"
 api_base = "https://api.mistral.ai/v1"
 api_key_env = "MISTRAL_API_KEY"
 enabled = true
@@ -686,6 +686,47 @@ embedding_dimension = 1024
 input_per_1k = 0.0001
 output_per_1k = 0.0
 embedding_per_1k = 0.0001
+image_per_unit = 0.0
+
+# =============================================================================
+# SCALEWAY GENERATIVE APIS PROVIDER
+# =============================================================================
+# Scaleway serverless Generative APIs for OpenAI-compatible embeddings.
+# Requires: SCW_SECRET_KEY environment variable.
+# Docs: https://www.scaleway.com/en/docs/generative-apis/
+
+[[providers]]
+name = "scaleway"
+display_name = "Scaleway"
+type = "openaicompatible"
+api_base = "https://api.scaleway.ai/v1"
+api_key_env = "SCW_SECRET_KEY"
+enabled = true
+priority = 11
+description = "Scaleway Generative APIs — OpenAI-compatible hosted embedding models"
+
+[[providers.models]]
+name = "qwen/qwen3-embedding-8b"
+display_name = "Qwen3 Embedding 8B"
+model_type = "embedding"
+description = "Qwen3 8B embedding model on Scaleway — 4096 dimensions, multilingual retrieval"
+deprecated = false
+tags = ["embedding", "multilingual", "recommended", "openai-compatible"]
+
+[providers.models.capabilities]
+context_length = 32000
+max_output_tokens = 0
+supports_vision = false
+supports_function_calling = false
+supports_json_mode = false
+supports_streaming = false
+supports_system_message = false
+embedding_dimension = 4096
+
+[providers.models.cost]
+input_per_1k = 0.0
+output_per_1k = 0.0
+embedding_per_1k = 0.0
 image_per_unit = 0.0
 
 # =============================================================================

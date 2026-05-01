@@ -15,7 +15,7 @@ title: 'Docker Quickstart'
 Copy and paste this into any terminal that has Docker:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main/docker-compose.quickstart.yml \
+curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake-fork/edgequake-main/docker-compose.quickstart.yml \
   | docker compose -f - up -d
 ```
 
@@ -29,7 +29,7 @@ That's it. Three versioned images (API, Web UI, PostgreSQL) are pulled from GitH
 
 ```bash
 # 1. Download the compose file
-curl -fsSL https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main/docker-compose.quickstart.yml \
+curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake-fork/edgequake-main/docker-compose.quickstart.yml \
   -o docker-compose.quickstart.yml
 
 # 2. Start the full stack
@@ -44,8 +44,8 @@ curl http://localhost:8080/health
 ## Option B — With git clone + make
 
 ```bash
-git clone https://github.com/raphaelmansuy/edgequake.git
-cd edgequake
+git clone https://github.com/noxomix/edgequake-fork.git
+cd edgequake-fork
 make stack
 ```
 
@@ -56,7 +56,7 @@ make stack
 ```bash
 # Download a specific version's compose file
 EDGEQUAKE_VERSION=0.10.3
-curl -fsSL "https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main/docker-compose.quickstart.yml" \
+curl -fsSL "https://raw.githubusercontent.com/noxomix/edgequake-fork/edgequake-main/docker-compose.quickstart.yml" \
   -o docker-compose.quickstart.yml
 
 # Start with that version
@@ -100,6 +100,22 @@ OPENAI_API_KEY=sk-... \
   docker compose -f docker-compose.quickstart.yml up -d
 ```
 
+### Mixed providers
+
+```bash
+EDGEQUAKE_LLM_PROVIDER=mistral \
+EDGEQUAKE_LLM_MODEL=mistral-small-latest \
+EDGEQUAKE_EMBEDDING_PROVIDER=scaleway \
+EDGEQUAKE_EMBEDDING_MODEL=qwen/qwen3-embedding-8b \
+EDGEQUAKE_EMBEDDING_DIMENSION=4096 \
+EDGEQUAKE_VISION_PROVIDER=openai \
+EDGEQUAKE_VISION_MODEL=gpt-4.1-nano \
+MISTRAL_API_KEY=... \
+SCW_SECRET_KEY=... \
+OPENAI_API_KEY=sk-... \
+  docker compose -f docker-compose.quickstart.yml up -d
+```
+
 ### Any OpenAI-compatible endpoint (LM Studio, vLLM, Azure, etc.)
 
 ```bash
@@ -111,19 +127,43 @@ OPENAI_BASE_URL=http://localhost:1234/v1 \
 
 ### Provider reference
 
-| Variable                       | Default                             | Description                            |
-| ------------------------------ | ----------------------------------- | -------------------------------------- |
-| `EDGEQUAKE_LLM_PROVIDER`       | `ollama`                            | `ollama`, `openai`, `lmstudio`, `mock` |
-| `EDGEQUAKE_LLM_MODEL`          | provider-specific default           | Main chat / extraction model           |
-| `EDGEQUAKE_EMBEDDING_PROVIDER` | same as LLM                         | Override embedding provider            |
-| `EDGEQUAKE_EMBEDDING_MODEL`    | provider-specific default           | Embedding model override               |
-| `OPENAI_API_KEY`               | _(empty)_                           | Required when provider is `openai`     |
-| `OPENAI_BASE_URL`              | _(empty)_                           | Override OpenAI base URL               |
-| `OLLAMA_HOST`                  | `http://host.docker.internal:11434` | Ollama server address                  |
-| `EDGEQUAKE_VERSION`            | `latest`                            | Pin to a specific release tag          |
-| `EDGEQUAKE_PORT`               | `8080`                              | API port                               |
-| `FRONTEND_PORT`                | `3000`                              | Web UI port                            |
-| `POSTGRES_PASSWORD`            | `edgequake_secret`                  | PostgreSQL password                    |
+| Variable                         | Default                             | Description                                                             |
+| -------------------------------- | ----------------------------------- | ----------------------------------------------------------------------- |
+| `EDGEQUAKE_LLM_PROVIDER`         | `ollama`                            | Main LLM provider                                                       |
+| `EDGEQUAKE_LLM_MODEL`            | provider-specific default           | Main chat / extraction model                                            |
+| `EDGEQUAKE_EMBEDDING_PROVIDER`   | same as LLM                         | Embedding provider override                                             |
+| `EDGEQUAKE_EMBEDDING_MODEL`      | provider-specific default           | Embedding model override                                                |
+| `EDGEQUAKE_EMBEDDING_DIMENSION`  | provider/model default              | Explicit embedding vector dimension                                     |
+| `EDGEQUAKE_VISION_PROVIDER`      | same as LLM                         | PDF/image vision provider                                               |
+| `EDGEQUAKE_VISION_MODEL`         | same as LLM model                   | PDF/image vision model                                                  |
+| `EDGEQUAKE_CHAT_API_KEY`         | _(empty)_                           | Optional LLM-only key override for OpenAI-compatible chat traffic       |
+| `EDGEQUAKE_CHAT_BASE_URL`        | _(empty)_                           | Optional LLM-only base URL override                                     |
+| `EDGEQUAKE_EMBEDDING_API_KEY`    | _(empty)_                           | Optional embedding-only key override for OpenAI-compatible providers    |
+| `EDGEQUAKE_EMBEDDING_BASE_URL`   | _(empty)_                           | Optional embedding-only base URL override                               |
+| `OPENAI_API_KEY`                 | _(empty)_                           | Required when any selected role uses `openai`                           |
+| `OPENAI_BASE_URL`                | _(empty)_                           | Override OpenAI base URL                                                |
+| `ANTHROPIC_API_KEY`              | _(empty)_                           | Required for `anthropic`                                                |
+| `GEMINI_API_KEY`                 | _(empty)_                           | Required for `gemini`                                                   |
+| `MISTRAL_API_KEY`                | _(empty)_                           | Required for `mistral`                                                  |
+| `XAI_API_KEY`                    | _(empty)_                           | Required for `xai`                                                      |
+| `OPENROUTER_API_KEY`             | _(empty)_                           | Required for `openrouter`                                               |
+| `MINIMAX_API_KEY`                | _(empty)_                           | Required for `minimax`                                                  |
+| `AZURE_OPENAI_API_KEY`           | _(empty)_                           | Required for `azure`                                                    |
+| `AZURE_OPENAI_ENDPOINT`          | _(empty)_                           | Required Azure resource endpoint                                        |
+| `GOOGLE_CLOUD_PROJECT`           | _(empty)_                           | Required for `vertexai`                                                 |
+| `GOOGLE_ACCESS_TOKEN`            | _(empty)_                           | Access token for `vertexai` in quickstart deployments                   |
+| `SCW_SECRET_KEY`                 | _(empty)_                           | Required for `scaleway` embeddings                                      |
+| `OLLAMA_HOST`                    | `http://host.docker.internal:11434` | Ollama server address                                                   |
+| `LMSTUDIO_HOST`                  | `http://host.docker.internal:1234`  | LM Studio server address                                                |
+| `EDGEQUAKE_VERSION`              | `latest`                            | Pin to a specific release tag                                           |
+| `EDGEQUAKE_IMAGE_REGISTRY`       | `ghcr.io`                           | Container registry hostname                                             |
+| `EDGEQUAKE_IMAGE_NAMESPACE`      | `noxomix`                           | Registry namespace / owner                                              |
+| `EDGEQUAKE_API_IMAGE`            | `edgequake`                         | API image name                                                          |
+| `EDGEQUAKE_FRONTEND_IMAGE`       | `edgequake-frontend`                | Frontend image name                                                     |
+| `EDGEQUAKE_POSTGRES_IMAGE`       | `edgequake-postgres`                | PostgreSQL image name                                                   |
+| `EDGEQUAKE_PORT`                 | `8080`                              | API port                                                                |
+| `FRONTEND_PORT`                  | `3000`                              | Web UI port                                                             |
+| `POSTGRES_PASSWORD`              | `edgequake_secret`                  | PostgreSQL password                                                     |
 
 ### Migration aliases
 
@@ -172,15 +212,15 @@ All images are multi-arch (`linux/amd64`, `linux/arm64`) and published to GitHub
 
 | Image                                      | Tag                 | Description                        |
 | ------------------------------------------ | ------------------- | ---------------------------------- |
-| `ghcr.io/raphaelmansuy/edgequake`          | `latest` / `0.10.3` | Rust API server                    |
-| `ghcr.io/raphaelmansuy/edgequake-frontend` | `latest` / `0.10.3` | Next.js Web UI                     |
-| `ghcr.io/raphaelmansuy/edgequake-postgres` | `latest` / `0.10.3` | PostgreSQL + pgvector + Apache AGE |
+| `ghcr.io/noxomix/edgequake`          | `latest` / `0.10.3` | Rust API server                    |
+| `ghcr.io/noxomix/edgequake-frontend` | `latest` / `0.10.3` | Next.js Web UI                     |
+| `ghcr.io/noxomix/edgequake-postgres` | `latest` / `0.10.3` | PostgreSQL + pgvector + Apache AGE |
 
 Pull an image manually:
 ```bash
-docker pull ghcr.io/raphaelmansuy/edgequake:latest
-docker pull ghcr.io/raphaelmansuy/edgequake-frontend:latest
-docker pull ghcr.io/raphaelmansuy/edgequake-postgres:latest
+docker pull ghcr.io/noxomix/edgequake:latest
+docker pull ghcr.io/noxomix/edgequake-frontend:latest
+docker pull ghcr.io/noxomix/edgequake-postgres:latest
 ```
 
 ---

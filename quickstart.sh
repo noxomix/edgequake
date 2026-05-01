@@ -1,8 +1,9 @@
 #!/usr/bin/env sh
 # EdgeQuake — Interactive Setup Wizard
+# Fork note: adapted in this fork to download install assets from the fork by default.
 #
 # Usage (no git clone required):
-#   curl -fsSL https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main/quickstart.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake-fork/edgequake-main/quickstart.sh | sh
 #
 # Or with a pinned version:
 #   EDGEQUAKE_VERSION=0.10.6 curl -fsSL ... | sh
@@ -20,13 +21,19 @@ EDGEQUAKE_VERSION="${EDGEQUAKE_VERSION:-latest}"
 EDGEQUAKE_PORT="${EDGEQUAKE_PORT:-8080}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.quickstart.yml}"
-RAW_BASE="https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main"
+EDGEQUAKE_INSTALL_REPO_OWNER="${EDGEQUAKE_INSTALL_REPO_OWNER:-noxomix}"
+EDGEQUAKE_INSTALL_REPO_NAME="${EDGEQUAKE_INSTALL_REPO_NAME:-edgequake-fork}"
+EDGEQUAKE_INSTALL_REF="${EDGEQUAKE_INSTALL_REF:-edgequake-main}"
+RAW_BASE="https://raw.githubusercontent.com/${EDGEQUAKE_INSTALL_REPO_OWNER}/${EDGEQUAKE_INSTALL_REPO_NAME}/${EDGEQUAKE_INSTALL_REF}"
 
 # Runtime state — populated by wizard, never read from env
 LLM_PROVIDER=""
 LLM_MODEL=""
 EMBED_PROVIDER=""
 EMBED_MODEL=""
+EMBED_DIMENSION=""
+VISION_PROVIDER=""
+VISION_MODEL=""
 COMPOSE_CMD=""
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -144,6 +151,169 @@ ui_confirm() {
   case "$_uc_ans" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
 }
 
+_prompt_text() {
+  _pt_prompt="$1"
+  _pt_default="${2:-}"
+  while true; do
+    if [ -n "$_pt_default" ]; then
+      printf "  ${C_BOLD}%s${C_RESET} [%s]: " "$_pt_prompt" "$_pt_default"
+    else
+      printf "  ${C_BOLD}%s${C_RESET}: " "$_pt_prompt"
+    fi
+    _tty_read
+    _pt_value="${_TTY_INPUT:-}"
+    if [ -z "$_pt_value" ] && [ -n "$_pt_default" ]; then
+      _pt_value="$_pt_default"
+    fi
+    if [ -n "$_pt_value" ]; then
+      _TTY_INPUT="$_pt_value"
+      return 0
+    fi
+    ui_warn "This value cannot be empty."
+  done
+}
+
+_provider_label() {
+  case "$1" in
+    openai)     printf "OpenAI" ;;
+    anthropic)  printf "Anthropic" ;;
+    gemini)     printf "Google Gemini" ;;
+    mistral)    printf "Mistral AI" ;;
+    azure)      printf "Azure OpenAI" ;;
+    vertexai)   printf "Google Vertex AI" ;;
+    xai)        printf "xAI" ;;
+    openrouter) printf "OpenRouter" ;;
+    minimax)    printf "MiniMax" ;;
+    ollama)     printf "Ollama" ;;
+    lmstudio)   printf "LM Studio" ;;
+    scaleway)   printf "Scaleway" ;;
+    *)          printf "%s" "$1" ;;
+  esac
+}
+
+_known_embedding_dimension() {
+  case "$1:$2" in
+    openai:text-embedding-3-small)  printf "1536" ;;
+    openai:text-embedding-3-large)  printf "3072" ;;
+    gemini:gemini-embedding-001)    printf "3072" ;;
+    mistral:mistral-embed)          printf "1024" ;;
+    mistral:codestral-embed)        printf "1024" ;;
+    azure:text-embedding-3-small)   printf "1536" ;;
+    azure:text-embedding-3-large)   printf "3072" ;;
+    vertexai:gemini-embedding-001)  printf "3072" ;;
+    scaleway:qwen/qwen3-embedding-8b) printf "4096" ;;
+    ollama:embeddinggemma:latest)   printf "768" ;;
+    ollama:nomic-embed-text:latest) printf "768" ;;
+    lmstudio:text-embedding-nomic-embed-text-v1.5) printf "768" ;;
+    lmstudio:text-embedding-ada-002) printf "1536" ;;
+    *)                              printf "" ;;
+  esac
+}
+
+_prompt_embedding_dimension_if_needed() {
+  _ped_known="$(_known_embedding_dimension "$EMBED_PROVIDER" "$EMBED_MODEL")"
+  if [ -n "$_ped_known" ]; then
+    EMBED_DIMENSION="$_ped_known"
+    ui_ok "Embedding dimension: ${C_BOLD}${EMBED_DIMENSION}${C_RESET}"
+    return 0
+  fi
+
+  _prompt_text "Embedding dimension for ${EMBED_MODEL}" "768"
+  EMBED_DIMENSION="${_TTY_INPUT:-768}"
+  case "$EMBED_DIMENSION" in
+    ''|*[!0-9]*)
+      ui_fail "Embedding dimension must be a positive integer."
+      exit 1
+      ;;
+  esac
+  ui_ok "Embedding dimension: ${C_BOLD}${EMBED_DIMENSION}${C_RESET}"
+}
+
+_choose_custom_model() {
+  _prompt_text "$1" "$2"
+  printf "%s" "${_TTY_INPUT:-$2}"
+}
+
+_ensure_secret() {
+  _es_var="$1"
+  _es_prompt="$2"
+  eval "_es_val=\${$_es_var:-}"
+  if [ -z "$_es_val" ]; then
+    printf "  ${C_BOLD}%s${C_RESET}: " "$_es_prompt"
+    _tty_read_secret
+    eval "$_es_var=\${_TTY_INPUT:-}"
+  fi
+  eval "_es_val=\${$_es_var:-}"
+  if [ -z "$_es_val" ]; then
+    ui_fail "Missing required value: ${_es_var}"
+    exit 1
+  fi
+}
+
+_ensure_text_var() {
+  _et_var="$1"
+  _et_prompt="$2"
+  _et_default="${3:-}"
+  eval "_et_val=\${$_et_var:-}"
+  if [ -z "$_et_val" ]; then
+    _prompt_text "$_et_prompt" "$_et_default"
+    eval "$_et_var=\${_TTY_INPUT:-}"
+  fi
+  eval "_et_val=\${$_et_var:-}"
+  if [ -z "$_et_val" ]; then
+    ui_fail "Missing required value: ${_et_var}"
+    exit 1
+  fi
+}
+
+_validate_ollama_model() {
+  _vom_role="$1"
+  _vom_model="$2"
+  _ollama_host_local="${OLLAMA_HOST:-http://localhost:11434}"
+  _ollama_host_docker="$(_to_docker_host "$_ollama_host_local")"
+
+  if curl -sf "${_ollama_host_local}/api/tags" > /dev/null 2>&1; then
+    ui_ok "Ollama is reachable for ${_vom_role} at ${_ollama_host_local}"
+    if [ "$_ollama_host_docker" != "$_ollama_host_local" ]; then
+      ui_info "Docker will connect to Ollama at: ${C_BOLD}${_ollama_host_docker}${C_RESET}"
+    fi
+    if curl -sf "${_ollama_host_local}/api/tags" 2>/dev/null | grep -q "\"${_vom_model}\"" 2>/dev/null; then
+      ui_ok "Ollama model '${_vom_model}' is available."
+    else
+      ui_warn "Ollama model '${_vom_model}' may not be pulled yet."
+      ui_info "Run after startup: ollama pull ${_vom_model}"
+    fi
+  else
+    ui_warn "Ollama is not reachable at ${_ollama_host_local}"
+    printf "    ollama serve &\n"
+    printf "    ollama pull %s\n" "$_vom_model"
+    if ! ui_confirm "Continue without Ollama running?" "n"; then
+      ui_fail "Aborted. Start Ollama and re-run."
+      exit 1
+    fi
+  fi
+}
+
+_validate_lmstudio_model() {
+  _vlm_role="$1"
+  _vlm_model="$2"
+  _lmstudio_host_local="${LMSTUDIO_HOST:-http://localhost:1234}"
+  if curl -sf "${_lmstudio_host_local}/v1/models" > /dev/null 2>&1; then
+    ui_ok "LM Studio is reachable for ${_vlm_role} at ${_lmstudio_host_local}"
+    if curl -sf "${_lmstudio_host_local}/v1/models" 2>/dev/null | grep -q "\"${_vlm_model}\"" 2>/dev/null; then
+      ui_ok "LM Studio model '${_vlm_model}' is listed."
+    else
+      ui_warn "LM Studio model '${_vlm_model}' is not listed by /v1/models."
+    fi
+  else
+    ui_warn "LM Studio is not reachable at ${_lmstudio_host_local}"
+    if ! ui_confirm "Continue without LM Studio running?" "n"; then
+      ui_fail "Aborted. Start LM Studio and re-run."
+      exit 1
+    fi
+  fi
+}
+
 # ════════════════════════════════════════════════════════════════════════════
 # § HTTP download helper (curl or wget)
 # ════════════════════════════════════════════════════════════════════════════
@@ -236,8 +406,10 @@ check_prerequisites() {
     ui_info  "The setup wizard requires an interactive terminal."
     ui_info  "For automated installs, use environment variables directly:"
     ui_blank
-    printf   '    EDGEQUAKE_LLM_PROVIDER=openai \\\n'
-    printf   '    OPENAI_API_KEY=sk-... \\\n'
+    printf   '    EDGEQUAKE_LLM_PROVIDER=mistral \\\n'
+    printf   '    EDGEQUAKE_EMBEDDING_PROVIDER=scaleway \\\n'
+    printf   '    EDGEQUAKE_VISION_PROVIDER=openai \\\n'
+    printf   '    MISTRAL_API_KEY=... OPENAI_API_KEY=sk-... SCW_SECRET_KEY=... \\\n'
     printf   "    %s -f %s up -d\n" "$COMPOSE_CMD" "$COMPOSE_FILE"
     ui_blank
     exit 1
@@ -366,161 +538,539 @@ handle_existing_install() {
 }
 
 # ════════════════════════════════════════════════════════════════════════════
-# § Step 4 — Provider wizard  (ADR-001)
-# Always asks; never auto-detects.  Informational hint only for API key.
+# § Step 4 — Provider wizard  (ADR-001, extended for mixed-provider flows)
 # ════════════════════════════════════════════════════════════════════════════
-choose_provider() {
+choose_llm_provider() {
   ui_section "LLM Provider"
-
-  if [ -n "${OPENAI_API_KEY:-}" ]; then
-    ui_info "OPENAI_API_KEY is set in your environment."
-  else
-    ui_info "Tip: export OPENAI_API_KEY=sk-... before running to use OpenAI."
-  fi
-  ui_blank
-
-  ui_menu "Which LLM provider do you want to use?" \
-    "OpenAI   — cloud API (GPT-5.4 family) · requires OPENAI_API_KEY" \
-    "Ollama   — fully local, free to run   · requires Ollama daemon on port 11434"
+  ui_menu "Which provider should handle LLM inference?" \
+    "OpenAI       — GPT-5 / GPT-4.1 family" \
+    "Anthropic    — Claude models" \
+    "Gemini       — Google Gemini API" \
+    "Mistral      — Mistral La Plateforme" \
+    "Azure        — Azure OpenAI deployment" \
+    "Vertex AI    — Google Cloud Vertex AI" \
+    "xAI          — Grok models" \
+    "OpenRouter   — aggregated frontier models" \
+    "MiniMax      — MiniMax AI models" \
+    "Ollama       — local or remote self-hosted" \
+    "LM Studio    — local OpenAI-compatible endpoint"
 
   case "$MENU_RESULT" in
     1) LLM_PROVIDER="openai" ;;
-    2) LLM_PROVIDER="ollama" ;;
+    2) LLM_PROVIDER="anthropic" ;;
+    3) LLM_PROVIDER="gemini" ;;
+    4) LLM_PROVIDER="mistral" ;;
+    5) LLM_PROVIDER="azure" ;;
+    6) LLM_PROVIDER="vertexai" ;;
+    7) LLM_PROVIDER="xai" ;;
+    8) LLM_PROVIDER="openrouter" ;;
+    9) LLM_PROVIDER="minimax" ;;
+    10) LLM_PROVIDER="ollama" ;;
+    11) LLM_PROVIDER="lmstudio" ;;
+  esac
+  ui_ok "LLM provider: ${C_BOLD}$(_provider_label "$LLM_PROVIDER")${C_RESET}"
+}
+
+choose_llm_model() {
+  ui_section "LLM Model"
+  case "$LLM_PROVIDER" in
+    openai)
+      ui_menu "Which OpenAI model for LLM inference?" \
+        "gpt-5.4-mini    Recommended — balanced cost and reliable structured output" \
+        "gpt-4.1-mini      Lower latency, solid general-purpose model" \
+        "gpt-5.4           Highest quality in the current OpenAI set" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="gpt-5.4-mini" ;;
+        2) LLM_MODEL="gpt-4.1-mini" ;;
+        3) LLM_MODEL="gpt-5.4" ;;
+        4) LLM_MODEL="$(_choose_custom_model "OpenAI model name" "gpt-5.4-mini")" ;;
+      esac
+      ;;
+    anthropic)
+      ui_menu "Which Anthropic model for LLM inference?" \
+        "claude-sonnet-4-6         Recommended — balanced flagship Claude" \
+        "claude-opus-4-6             Highest capability" \
+        "claude-haiku-4-5-20251001   Faster, lower cost" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="claude-sonnet-4-6" ;;
+        2) LLM_MODEL="claude-opus-4-6" ;;
+        3) LLM_MODEL="claude-haiku-4-5-20251001" ;;
+        4) LLM_MODEL="$(_choose_custom_model "Anthropic model name" "claude-sonnet-4-6")" ;;
+      esac
+      ;;
+    gemini)
+      ui_menu "Which Gemini model for LLM inference?" \
+        "gemini-2.5-flash   Recommended — fast and multimodal" \
+        "gemini-2.5-pro       Highest quality and long context" \
+        "gemini-2.0-flash     Lower-cost alternative" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="gemini-2.5-flash" ;;
+        2) LLM_MODEL="gemini-2.5-pro" ;;
+        3) LLM_MODEL="gemini-2.0-flash" ;;
+        4) LLM_MODEL="$(_choose_custom_model "Gemini model name" "gemini-2.5-flash")" ;;
+      esac
+      ;;
+    mistral)
+      ui_menu "Which Mistral model for LLM inference?" \
+        "mistral-small-latest    Recommended — cost-effective default" \
+        "mistral-medium-latest     Stronger multimodal option" \
+        "mistral-large-latest      Highest capability" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="mistral-small-latest" ;;
+        2) LLM_MODEL="mistral-medium-latest" ;;
+        3) LLM_MODEL="mistral-large-latest" ;;
+        4) LLM_MODEL="$(_choose_custom_model "Mistral model name" "mistral-small-latest")" ;;
+      esac
+      ;;
+    azure)
+      ui_menu "How do you want to set the Azure OpenAI deployment?" \
+        "gpt-4o                Recommended default deployment name" \
+        "text deployment name manually"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="gpt-4o" ;;
+        2) LLM_MODEL="$(_choose_custom_model "Azure OpenAI deployment name" "gpt-4o")" ;;
+      esac
+      ;;
+    vertexai)
+      ui_menu "Which Vertex AI model for LLM inference?" \
+        "gemini-2.5-flash   Recommended — fast and cost-aware" \
+        "gemini-2.5-pro       Higher capability" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="gemini-2.5-flash" ;;
+        2) LLM_MODEL="gemini-2.5-pro" ;;
+        3) LLM_MODEL="$(_choose_custom_model "Vertex AI model name" "gemini-2.5-flash")" ;;
+      esac
+      ;;
+    xai)
+      ui_menu "Which xAI model for LLM inference?" \
+        "grok-4-1-fast   Recommended — fast Grok default" \
+        "grok-4-0709       Higher-end Grok variant" \
+        "grok-3            Lower-cost fallback" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="grok-4-1-fast" ;;
+        2) LLM_MODEL="grok-4-0709" ;;
+        3) LLM_MODEL="grok-3" ;;
+        4) LLM_MODEL="$(_choose_custom_model "xAI model name" "grok-4-1-fast")" ;;
+      esac
+      ;;
+    openrouter)
+      ui_menu "Which OpenRouter model for LLM inference?" \
+        "openai/gpt-4o-mini                     Recommended — broad compatibility" \
+        "anthropic/claude-sonnet-4-5-20250929   Strong reasoning/coding" \
+        "meta-llama/llama-3.1-405b-instruct     Open model flagship" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="openai/gpt-4o-mini" ;;
+        2) LLM_MODEL="anthropic/claude-sonnet-4-5-20250929" ;;
+        3) LLM_MODEL="meta-llama/llama-3.1-405b-instruct" ;;
+        4) LLM_MODEL="$(_choose_custom_model "OpenRouter model name" "openai/gpt-4o-mini")" ;;
+      esac
+      ;;
+    minimax)
+      ui_menu "Which MiniMax model for LLM inference?" \
+        "MiniMax-M2.7             Recommended — flagship default" \
+        "MiniMax-M2.7-highspeed     Lower-latency option" \
+        "MiniMax-M2.5-highspeed     Legacy fast option" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="MiniMax-M2.7" ;;
+        2) LLM_MODEL="MiniMax-M2.7-highspeed" ;;
+        3) LLM_MODEL="MiniMax-M2.5-highspeed" ;;
+        4) LLM_MODEL="$(_choose_custom_model "MiniMax model name" "MiniMax-M2.7")" ;;
+      esac
+      ;;
+    ollama)
+      ui_menu "Which Ollama model for LLM inference?" \
+        "gemma4:e4b       Recommended — balanced quality/size" \
+        "gemma4:latest      General-purpose default" \
+        "qwen2.5:latest     Strong at structured/JSON tasks" \
+        "llama3.2:latest    Small general-purpose model" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="gemma4:e4b" ;;
+        2) LLM_MODEL="gemma4:latest" ;;
+        3) LLM_MODEL="qwen2.5:latest" ;;
+        4) LLM_MODEL="llama3.2:latest" ;;
+        5) LLM_MODEL="$(_choose_custom_model "Ollama model name" "gemma4:e4b")" ;;
+      esac
+      ;;
+    lmstudio)
+      ui_menu "Which LM Studio model for LLM inference?" \
+        "gemma-3n-e4b-it       Recommended local default" \
+        "gemma-3n-e2b-it         Lighter local model" \
+        "zai-org/glm-4.6v-flash  Multimodal local option" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) LLM_MODEL="gemma-3n-e4b-it" ;;
+        2) LLM_MODEL="gemma-3n-e2b-it" ;;
+        3) LLM_MODEL="zai-org/glm-4.6v-flash" ;;
+        4) LLM_MODEL="$(_choose_custom_model "LM Studio model name" "gemma-3n-e4b-it")" ;;
+      esac
+      ;;
+  esac
+  ui_ok "LLM model: ${C_BOLD}${LLM_MODEL}${C_RESET}"
+}
+
+choose_embedding_provider() {
+  ui_section "Embedding Provider"
+  ui_menu "Which provider should generate embeddings?" \
+    "OpenAI       — text-embedding-3 family" \
+    "Gemini       — gemini-embedding-001" \
+    "Mistral      — mistral-embed / codestral-embed" \
+    "Azure        — Azure OpenAI embedding deployment" \
+    "Vertex AI    — Gemini embedding via Google Cloud" \
+    "Scaleway     — qwen3 embedding endpoint" \
+    "Ollama       — local embedding models" \
+    "LM Studio    — local OpenAI-compatible embedding endpoint"
+
+  case "$MENU_RESULT" in
+    1) EMBED_PROVIDER="openai" ;;
+    2) EMBED_PROVIDER="gemini" ;;
+    3) EMBED_PROVIDER="mistral" ;;
+    4) EMBED_PROVIDER="azure" ;;
+    5) EMBED_PROVIDER="vertexai" ;;
+    6) EMBED_PROVIDER="scaleway" ;;
+    7) EMBED_PROVIDER="ollama" ;;
+    8) EMBED_PROVIDER="lmstudio" ;;
+  esac
+  ui_ok "Embedding provider: ${C_BOLD}$(_provider_label "$EMBED_PROVIDER")${C_RESET}"
+}
+
+choose_embedding_model() {
+  ui_section "Embedding Model"
+  case "$EMBED_PROVIDER" in
+    openai)
+      ui_menu "Which OpenAI model for embeddings?" \
+        "text-embedding-3-small   Recommended — 1536 dims" \
+        "text-embedding-3-large     Higher quality, 3072 dims" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) EMBED_MODEL="text-embedding-3-small" ;;
+        2) EMBED_MODEL="text-embedding-3-large" ;;
+        3) EMBED_MODEL="$(_choose_custom_model "OpenAI embedding model" "text-embedding-3-small")" ;;
+      esac
+      ;;
+    gemini)
+      ui_menu "Which Gemini model for embeddings?" \
+        "gemini-embedding-001   Recommended — 3072 dims" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) EMBED_MODEL="gemini-embedding-001" ;;
+        2) EMBED_MODEL="$(_choose_custom_model "Gemini embedding model" "gemini-embedding-001")" ;;
+      esac
+      ;;
+    mistral)
+      ui_menu "Which Mistral model for embeddings?" \
+        "mistral-embed      Recommended — 1024 dims" \
+        "codestral-embed      Alternative — 1024 dims" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) EMBED_MODEL="mistral-embed" ;;
+        2) EMBED_MODEL="codestral-embed" ;;
+        3) EMBED_MODEL="$(_choose_custom_model "Mistral embedding model" "mistral-embed")" ;;
+      esac
+      ;;
+    azure)
+      ui_menu "How do you want to set the Azure embedding deployment?" \
+        "text-embedding-3-small   Recommended default deployment name" \
+        "text-embedding-3-large     Higher dimension deployment" \
+        "Custom deployment name"
+      case "$MENU_RESULT" in
+        1) EMBED_MODEL="text-embedding-3-small" ;;
+        2) EMBED_MODEL="text-embedding-3-large" ;;
+        3) EMBED_MODEL="$(_choose_custom_model "Azure embedding deployment name" "text-embedding-3-small")" ;;
+      esac
+      ;;
+    vertexai)
+      ui_menu "Which Vertex AI model for embeddings?" \
+        "gemini-embedding-001   Recommended — 3072 dims" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) EMBED_MODEL="gemini-embedding-001" ;;
+        2) EMBED_MODEL="$(_choose_custom_model "Vertex AI embedding model" "gemini-embedding-001")" ;;
+      esac
+      ;;
+    scaleway)
+      ui_menu "Which Scaleway model for embeddings?" \
+        "qwen/qwen3-embedding-8b   Recommended — 4096 dims" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) EMBED_MODEL="qwen/qwen3-embedding-8b" ;;
+        2) EMBED_MODEL="$(_choose_custom_model "Scaleway embedding model" "qwen/qwen3-embedding-8b")" ;;
+      esac
+      ;;
+    ollama)
+      ui_menu "Which Ollama model for embeddings?" \
+        "embeddinggemma:latest    Recommended — fast, 768 dims" \
+        "nomic-embed-text:latest  Alternative — 768 dims" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) EMBED_MODEL="embeddinggemma:latest" ;;
+        2) EMBED_MODEL="nomic-embed-text:latest" ;;
+        3) EMBED_MODEL="$(_choose_custom_model "Ollama embedding model" "embeddinggemma:latest")" ;;
+      esac
+      ;;
+    lmstudio)
+      ui_menu "Which LM Studio model for embeddings?" \
+        "text-embedding-nomic-embed-text-v1.5   Recommended — 768 dims" \
+        "text-embedding-ada-002                   Alternative — 1536 dims" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) EMBED_MODEL="text-embedding-nomic-embed-text-v1.5" ;;
+        2) EMBED_MODEL="text-embedding-ada-002" ;;
+        3) EMBED_MODEL="$(_choose_custom_model "LM Studio embedding model" "text-embedding-nomic-embed-text-v1.5")" ;;
+      esac
+      ;;
   esac
 
-  ui_ok "Provider: ${C_BOLD}${LLM_PROVIDER}${C_RESET}"
+  ui_ok "Embedding model: ${C_BOLD}${EMBED_MODEL}${C_RESET}"
+  _prompt_embedding_dimension_if_needed
 }
 
-# ════════════════════════════════════════════════════════════════════════════
-# § Step 5 — Model wizard  (ADR-003)
-# Presents LLM model then embedding model, both scoped to the chosen provider.
-# ════════════════════════════════════════════════════════════════════════════
-choose_models() {
-  ui_section "Model Selection"
+choose_vision_provider() {
+  ui_section "Vision Provider"
+  ui_menu "Which provider should handle PDF/image vision?" \
+    "Use same provider/model as the main LLM" \
+    "OpenAI       — GPT-4.1 / GPT-4o family" \
+    "Anthropic    — Claude vision models" \
+    "Gemini       — Gemini multimodal models" \
+    "Mistral      — Pixtral models" \
+    "Azure        — Azure OpenAI vision deployment" \
+    "Vertex AI    — Gemini multimodal via Google Cloud" \
+    "xAI          — Grok multimodal" \
+    "OpenRouter   — routed multimodal models" \
+    "Ollama       — local multimodal models" \
+    "LM Studio    — local OpenAI-compatible multimodal"
 
-  if [ "$LLM_PROVIDER" = "openai" ]; then
+  case "$MENU_RESULT" in
+    1)
+      VISION_PROVIDER="$LLM_PROVIDER"
+      VISION_MODEL="$LLM_MODEL"
+      ui_ok "Vision uses the main LLM configuration."
+      return 0
+      ;;
+    2) VISION_PROVIDER="openai" ;;
+    3) VISION_PROVIDER="anthropic" ;;
+    4) VISION_PROVIDER="gemini" ;;
+    5) VISION_PROVIDER="mistral" ;;
+    6) VISION_PROVIDER="azure" ;;
+    7) VISION_PROVIDER="vertexai" ;;
+    8) VISION_PROVIDER="xai" ;;
+    9) VISION_PROVIDER="openrouter" ;;
+    10) VISION_PROVIDER="ollama" ;;
+    11) VISION_PROVIDER="lmstudio" ;;
+  esac
+  ui_ok "Vision provider: ${C_BOLD}$(_provider_label "$VISION_PROVIDER")${C_RESET}"
+}
 
-    ui_menu "Which OpenAI model for LLM inference?" \
-      "gpt-5.4-mini   Recommended — fast, affordable, reliable JSON output   (in:\$0.75 out:\$4.50 per MTok)" \
-      "gpt-5.4-nano     Ultra-cheap, great for testing, direct output         (in:\$0.20 out:\$1.25 per MTok)" \
-      "gpt-5.4          Premium quality, large context                        (in:\$2.50 out:\$15.00 per MTok)" \
-      "gpt-5.4-mini     Fast with larger context window                       (in:\$0.75 out:\$4.50 per MTok)"
-    # NOTE: gpt-5-* and gpt-5-nano/-mini are reasoning-only models; they
-    # consume all completion tokens for chain-of-thought, leaving none for
-    # JSON output. Always prefer gpt-5.4-* models for entity extraction.
-    case "$MENU_RESULT" in
-      1) LLM_MODEL="gpt-5.4-mini" ;;
-      2) LLM_MODEL="gpt-5.4-nano" ;;
-      3) LLM_MODEL="gpt-5.4"      ;;
-      4) LLM_MODEL="gpt-5.4-mini" ;;
-    esac
-
-    ui_menu "Which OpenAI model for embeddings?" \
-      "text-embedding-3-small   Recommended — fast, 1536 dims" \
-      "text-embedding-3-large   Higher quality, 3072 dims"
-    case "$MENU_RESULT" in
-      1) EMBED_MODEL="text-embedding-3-small" ;;
-      2) EMBED_MODEL="text-embedding-3-large" ;;
-    esac
-
-    EMBED_PROVIDER="openai"
-
-  else  # ollama
-
-    ui_menu "Which Ollama model for LLM inference?" \
-      "gemma4:e4b       Recommended — balanced quality/size (9.6 GB)" \
-      "gemma4:e2b         Lighter, faster startup           (7.2 GB)" \
-      "gemma4:26b         Large MoE, best quality           (requires 16+ GB RAM)" \
-      "qwen2.5:latest     Strong at structured/JSON tasks   (~5 GB)" \
-      "llama3.2:latest    Meta general-purpose model        (~2 GB)"
-    case "$MENU_RESULT" in
-      1) LLM_MODEL="gemma4:e4b"      ;;
-      2) LLM_MODEL="gemma4:e2b"      ;;
-      3) LLM_MODEL="gemma4:26b"      ;;
-      4) LLM_MODEL="qwen2.5:latest"  ;;
-      5) LLM_MODEL="llama3.2:latest" ;;
-    esac
-
-    ui_menu "Which Ollama model for embeddings?" \
-      "embeddinggemma:latest    Recommended — fast, high quality" \
-      "nomic-embed-text:latest  Alternative — well-tested"
-    case "$MENU_RESULT" in
-      1) EMBED_MODEL="embeddinggemma:latest"   ;;
-      2) EMBED_MODEL="nomic-embed-text:latest" ;;
-    esac
-
-    EMBED_PROVIDER="ollama"
-
+choose_vision_model() {
+  if [ "$VISION_PROVIDER" = "$LLM_PROVIDER" ] && [ "$VISION_MODEL" = "$LLM_MODEL" ]; then
+    return 0
   fi
 
-  ui_ok "LLM model:       ${C_BOLD}${LLM_MODEL}${C_RESET}"
-  ui_ok "Embedding model: ${C_BOLD}${EMBED_MODEL}${C_RESET}"
+  ui_section "Vision Model"
+  case "$VISION_PROVIDER" in
+    openai)
+      ui_menu "Which OpenAI model for vision / PDF ingestion?" \
+        "gpt-4.1-nano   Recommended — cheapest practical vision option" \
+        "gpt-4.1-mini     Better quality at moderate cost" \
+        "gpt-4o           Strong multimodal default" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) VISION_MODEL="gpt-4.1-nano" ;;
+        2) VISION_MODEL="gpt-4.1-mini" ;;
+        3) VISION_MODEL="gpt-4o" ;;
+        4) VISION_MODEL="$(_choose_custom_model "OpenAI vision model" "gpt-4.1-nano")" ;;
+      esac
+      ;;
+    anthropic)
+      ui_menu "Which Anthropic model for vision / PDF ingestion?" \
+        "claude-sonnet-4-6         Recommended — strong multimodal default" \
+        "claude-opus-4-6             Highest capability" \
+        "claude-haiku-4-5-20251001   Lower-cost option" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) VISION_MODEL="claude-sonnet-4-6" ;;
+        2) VISION_MODEL="claude-opus-4-6" ;;
+        3) VISION_MODEL="claude-haiku-4-5-20251001" ;;
+        4) VISION_MODEL="$(_choose_custom_model "Anthropic vision model" "claude-sonnet-4-6")" ;;
+      esac
+      ;;
+    gemini)
+      ui_menu "Which Gemini model for vision / PDF ingestion?" \
+        "gemini-2.5-flash   Recommended — fast multimodal default" \
+        "gemini-2.5-pro       Higher quality" \
+        "gemini-2.0-flash     Lower-cost option" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) VISION_MODEL="gemini-2.5-flash" ;;
+        2) VISION_MODEL="gemini-2.5-pro" ;;
+        3) VISION_MODEL="gemini-2.0-flash" ;;
+        4) VISION_MODEL="$(_choose_custom_model "Gemini vision model" "gemini-2.5-flash")" ;;
+      esac
+      ;;
+    mistral)
+      ui_menu "Which Mistral model for vision / PDF ingestion?" \
+        "pixtral-large-latest   Recommended — best PDF/image choice" \
+        "pixtral-12b-2409         Smaller alternative" \
+        "mistral-medium-latest    Multimodal fallback" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) VISION_MODEL="pixtral-large-latest" ;;
+        2) VISION_MODEL="pixtral-12b-2409" ;;
+        3) VISION_MODEL="mistral-medium-latest" ;;
+        4) VISION_MODEL="$(_choose_custom_model "Mistral vision model" "pixtral-large-latest")" ;;
+      esac
+      ;;
+    azure)
+      VISION_MODEL="$(_choose_custom_model "Azure vision deployment name" "gpt-4o")"
+      ;;
+    vertexai)
+      ui_menu "Which Vertex AI model for vision / PDF ingestion?" \
+        "gemini-2.5-flash   Recommended — fast multimodal default" \
+        "gemini-2.5-pro       Higher capability" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) VISION_MODEL="gemini-2.5-flash" ;;
+        2) VISION_MODEL="gemini-2.5-pro" ;;
+        3) VISION_MODEL="$(_choose_custom_model "Vertex AI vision model" "gemini-2.5-flash")" ;;
+      esac
+      ;;
+    xai)
+      ui_menu "Which xAI model for vision / PDF ingestion?" \
+        "grok-4-1-fast   Recommended — fast Grok default" \
+        "grok-4-0709       Higher-end Grok variant" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) VISION_MODEL="grok-4-1-fast" ;;
+        2) VISION_MODEL="grok-4-0709" ;;
+        3) VISION_MODEL="$(_choose_custom_model "xAI vision model" "grok-4-1-fast")" ;;
+      esac
+      ;;
+    openrouter)
+      ui_menu "Which OpenRouter model for vision / PDF ingestion?" \
+        "openai/gpt-4o                         Recommended — broad multimodal support" \
+        "anthropic/claude-sonnet-4-5-20250929   Strong alternative" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) VISION_MODEL="openai/gpt-4o" ;;
+        2) VISION_MODEL="anthropic/claude-sonnet-4-5-20250929" ;;
+        3) VISION_MODEL="$(_choose_custom_model "OpenRouter vision model" "openai/gpt-4o")" ;;
+      esac
+      ;;
+    ollama)
+      ui_menu "Which Ollama model for vision / PDF ingestion?" \
+        "gemma4:latest        Recommended local multimodal default" \
+        "llama3.2-vision:latest Alternative local vision model" \
+        "gemma4:e4b            Smaller local option" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) VISION_MODEL="gemma4:latest" ;;
+        2) VISION_MODEL="llama3.2-vision:latest" ;;
+        3) VISION_MODEL="gemma4:e4b" ;;
+        4) VISION_MODEL="$(_choose_custom_model "Ollama vision model" "gemma4:latest")" ;;
+      esac
+      ;;
+    lmstudio)
+      ui_menu "Which LM Studio model for vision / PDF ingestion?" \
+        "zai-org/glm-4.6v-flash  Recommended local multimodal option" \
+        "gemma-3n-e4b-it         Smaller local fallback" \
+        "Custom model"
+      case "$MENU_RESULT" in
+        1) VISION_MODEL="zai-org/glm-4.6v-flash" ;;
+        2) VISION_MODEL="gemma-3n-e4b-it" ;;
+        3) VISION_MODEL="$(_choose_custom_model "LM Studio vision model" "zai-org/glm-4.6v-flash")" ;;
+      esac
+      ;;
+  esac
+  ui_ok "Vision model: ${C_BOLD}${VISION_MODEL}${C_RESET}"
+}
+
+choose_models() {
+  choose_llm_provider
+  choose_llm_model
+  choose_embedding_provider
+  choose_embedding_model
+  choose_vision_provider
+  choose_vision_model
 }
 
 # ════════════════════════════════════════════════════════════════════════════
-# § Step 6 — Provider validation
-# OpenAI: ensure API key is available (prompt if missing, mask input).
-# Ollama: ping /api/tags; check if the chosen model is pulled.
+# § Step 5 — Provider validation
 # ════════════════════════════════════════════════════════════════════════════
+validate_role_provider() {
+  _vr_role="$1"
+  _vr_provider="$2"
+  _vr_model="$3"
+
+  case "$_vr_provider" in
+    openai)
+      _ensure_secret OPENAI_API_KEY "Enter your OpenAI API key for ${_vr_role} (input hidden)"
+      ui_ok "OpenAI credentials ready for ${_vr_role}."
+      ;;
+    anthropic)
+      _ensure_secret ANTHROPIC_API_KEY "Enter your Anthropic API key for ${_vr_role} (input hidden)"
+      ui_ok "Anthropic credentials ready for ${_vr_role}."
+      ;;
+    gemini)
+      _ensure_secret GEMINI_API_KEY "Enter your Gemini API key for ${_vr_role} (input hidden)"
+      ui_ok "Gemini credentials ready for ${_vr_role}."
+      ;;
+    mistral)
+      _ensure_secret MISTRAL_API_KEY "Enter your Mistral API key for ${_vr_role} (input hidden)"
+      ui_ok "Mistral credentials ready for ${_vr_role}."
+      ;;
+    azure)
+      _ensure_secret AZURE_OPENAI_API_KEY "Enter your Azure OpenAI API key for ${_vr_role} (input hidden)"
+      _ensure_text_var AZURE_OPENAI_ENDPOINT "Azure OpenAI endpoint for ${_vr_role}" "https://your-resource.openai.azure.com"
+      ui_ok "Azure OpenAI credentials ready for ${_vr_role}."
+      ;;
+    vertexai)
+      _ensure_text_var GOOGLE_CLOUD_PROJECT "Google Cloud project ID for ${_vr_role}"
+      _ensure_secret GOOGLE_ACCESS_TOKEN "Enter your Google access token for ${_vr_role} (input hidden)"
+      ui_ok "Vertex AI credentials ready for ${_vr_role}."
+      ;;
+    xai)
+      _ensure_secret XAI_API_KEY "Enter your xAI API key for ${_vr_role} (input hidden)"
+      ui_ok "xAI credentials ready for ${_vr_role}."
+      ;;
+    openrouter)
+      _ensure_secret OPENROUTER_API_KEY "Enter your OpenRouter API key for ${_vr_role} (input hidden)"
+      ui_ok "OpenRouter credentials ready for ${_vr_role}."
+      ;;
+    minimax)
+      _ensure_secret MINIMAX_API_KEY "Enter your MiniMax API key for ${_vr_role} (input hidden)"
+      ui_ok "MiniMax credentials ready for ${_vr_role}."
+      ;;
+    scaleway)
+      _ensure_secret SCW_SECRET_KEY "Enter your Scaleway API key for ${_vr_role} (input hidden)"
+      ui_ok "Scaleway credentials ready for ${_vr_role}."
+      ;;
+    ollama)
+      _validate_ollama_model "$_vr_role" "$_vr_model"
+      ;;
+    lmstudio)
+      _ensure_text_var LMSTUDIO_HOST "LM Studio host for ${_vr_role}" "http://localhost:1234"
+      _validate_lmstudio_model "$_vr_role" "$_vr_model"
+      ;;
+  esac
+}
+
 validate_provider() {
   ui_section "Provider Validation"
+  validate_role_provider "LLM" "$LLM_PROVIDER" "$LLM_MODEL"
+  validate_role_provider "Embedding" "$EMBED_PROVIDER" "$EMBED_MODEL"
 
-  if [ "$LLM_PROVIDER" = "openai" ]; then
-
-    if [ -z "${OPENAI_API_KEY:-}" ]; then
-      ui_warn "OPENAI_API_KEY is not set."
-      printf "  Enter your OpenAI API key (input hidden): "
-      _tty_read_secret
-      OPENAI_API_KEY="${_TTY_INPUT:-}"
-      if [ -z "$OPENAI_API_KEY" ]; then
-        ui_fail "No API key provided."
-        ui_fail "Re-run with: export OPENAI_API_KEY=sk-... && sh quickstart.sh"
-        exit 1
-      fi
-    fi
-    ui_ok "OpenAI API key is set."
-
-  else  # ollama
-
-    # WHY: Validate from the HOST side using the host-accessible address.
-    # The Docker container will use host.docker.internal (see start_stack),
-    # but for this pre-flight check we need to reach Ollama from THIS shell.
-    _ollama_host_local="${OLLAMA_HOST:-http://localhost:11434}"
-    _ollama_host_docker="$(_to_docker_host "$_ollama_host_local")"
-
-    if curl -sf "${_ollama_host_local}/api/tags" > /dev/null 2>&1; then
-      ui_ok "Ollama is reachable at ${_ollama_host_local}"
-
-      # Inform the user when translation will occur — no surprises.
-      if [ "$_ollama_host_docker" != "$_ollama_host_local" ]; then
-        ui_info "Docker will connect to Ollama at: ${C_BOLD}${_ollama_host_docker}${C_RESET}"
-        ui_info "(loopback addresses are auto-translated for container networking)"
-      fi
-
-      # Non-critical: check if chosen model is already pulled
-      if curl -sf "${_ollama_host_local}/api/tags" 2>/dev/null \
-           | grep -q "\"${LLM_MODEL}\"" 2>/dev/null; then
-        ui_ok "Model '${LLM_MODEL}' is available in Ollama."
-      else
-        ui_warn "Model '${LLM_MODEL}' may not be pulled yet."
-        ui_info "Run after startup: ollama pull ${LLM_MODEL}"
-      fi
-
-    else
-      ui_warn "Ollama is not reachable at ${_ollama_host_local}"
-      ui_blank
-      printf "  ${C_DIM}To start Ollama:${C_RESET}\n"
-      printf "    ollama serve &\n"
-      printf "    ollama pull %s\n" "$LLM_MODEL"
-      ui_blank
-
-      if ! ui_confirm "Continue without Ollama running?" "n"; then
-        ui_fail "Aborted. Start Ollama and re-run."
-        exit 1
-      fi
-      ui_warn "Remember to start Ollama before uploading documents."
-    fi
-
+  if [ "$VISION_PROVIDER:$VISION_MODEL" = "$LLM_PROVIDER:$LLM_MODEL" ]; then
+    ui_ok "Vision reuses the validated LLM provider."
+  else
+    validate_role_provider "Vision" "$VISION_PROVIDER" "$VISION_MODEL"
   fi
 }
 
@@ -538,39 +1088,9 @@ start_stack() {
   export EDGEQUAKE_LLM_MODEL="$LLM_MODEL"
   export EDGEQUAKE_EMBEDDING_PROVIDER="$EMBED_PROVIDER"
   export EDGEQUAKE_EMBEDDING_MODEL="$EMBED_MODEL"
-
-  # WHY: EDGEQUAKE_VISION_PROVIDER defaults to the same provider as the main LLM.
-  # This is the First-Principle correct behaviour: the vision LLM (PDF → Markdown)
-  # should use whatever provider the user selected, not a hardcoded "openai".
-  # An explicit EDGEQUAKE_VISION_PROVIDER env var overrides this (power users).
-  if [ -z "${EDGEQUAKE_VISION_PROVIDER:-}" ]; then
-    export EDGEQUAKE_VISION_PROVIDER="$LLM_PROVIDER"
-  else
-    export EDGEQUAKE_VISION_PROVIDER
-  fi
-  # Vision model: if not explicitly set, leave empty so the server derives it
-  # from EDGEQUAKE_LLM_MODEL / provider default (DRY: one source of truth).
-  if [ -n "${EDGEQUAKE_VISION_MODEL:-}" ]; then
-    export EDGEQUAKE_VISION_MODEL
-  else
-    unset EDGEQUAKE_VISION_MODEL 2>/dev/null || true
-  fi
-
-  # WHY: Only export OPENAI_API_KEY for OpenAI mode.
-  # For Ollama mode, unset it to prevent an empty string reaching the container
-  # (Docker Compose maps unset -> "" via ${VAR:-}; the API strips empty env vars
-  # at startup, but defence-in-depth is better).
-  if [ "$LLM_PROVIDER" = "openai" ]; then
-    export OPENAI_API_KEY
-  else
-    unset OPENAI_API_KEY 2>/dev/null || true
-  fi
-
-  # Always unset OPENAI_BASE_URL unless the user has explicitly set it to a
-  # non-empty value (e.g. for an OpenAI-compatible endpoint).
-  if [ -z "${OPENAI_BASE_URL:-}" ]; then
-    unset OPENAI_BASE_URL 2>/dev/null || true
-  fi
+  export EDGEQUAKE_EMBEDDING_DIMENSION="$EMBED_DIMENSION"
+  export EDGEQUAKE_VISION_PROVIDER="$VISION_PROVIDER"
+  export EDGEQUAKE_VISION_MODEL="$VISION_MODEL"
 
   # ── Ollama host: translate loopback → host.docker.internal ────────────────
   # WHY (first principle): Docker containers use their own network namespace.
@@ -590,6 +1110,32 @@ start_stack() {
     ui_info "  ${_raw_ollama}  →  ${OLLAMA_HOST}"
   fi
   export OLLAMA_HOST
+  if [ -n "${LMSTUDIO_HOST:-}" ]; then
+    _raw_lmstudio="${LMSTUDIO_HOST}"
+    LMSTUDIO_HOST="$(_to_docker_host "$_raw_lmstudio")"
+    if [ "$LMSTUDIO_HOST" != "$_raw_lmstudio" ]; then
+      ui_info "Translating LM Studio host for Docker networking:"
+      ui_info "  ${_raw_lmstudio}  →  ${LMSTUDIO_HOST}"
+    fi
+    export LMSTUDIO_HOST
+  fi
+  [ -n "${OPENAI_API_KEY:-}" ] && export OPENAI_API_KEY
+  [ -n "${OPENAI_BASE_URL:-}" ] && export OPENAI_BASE_URL
+  [ -n "${ANTHROPIC_API_KEY:-}" ] && export ANTHROPIC_API_KEY
+  [ -n "${GEMINI_API_KEY:-}" ] && export GEMINI_API_KEY
+  [ -n "${MISTRAL_API_KEY:-}" ] && export MISTRAL_API_KEY
+  [ -n "${XAI_API_KEY:-}" ] && export XAI_API_KEY
+  [ -n "${OPENROUTER_API_KEY:-}" ] && export OPENROUTER_API_KEY
+  [ -n "${MINIMAX_API_KEY:-}" ] && export MINIMAX_API_KEY
+  [ -n "${AZURE_OPENAI_API_KEY:-}" ] && export AZURE_OPENAI_API_KEY
+  [ -n "${AZURE_OPENAI_ENDPOINT:-}" ] && export AZURE_OPENAI_ENDPOINT
+  [ -n "${GOOGLE_CLOUD_PROJECT:-}" ] && export GOOGLE_CLOUD_PROJECT
+  [ -n "${GOOGLE_ACCESS_TOKEN:-}" ] && export GOOGLE_ACCESS_TOKEN
+  [ -n "${SCW_SECRET_KEY:-}" ] && export SCW_SECRET_KEY
+  [ -n "${EDGEQUAKE_CHAT_API_KEY:-}" ] && export EDGEQUAKE_CHAT_API_KEY
+  [ -n "${EDGEQUAKE_CHAT_BASE_URL:-}" ] && export EDGEQUAKE_CHAT_BASE_URL
+  [ -n "${EDGEQUAKE_EMBEDDING_API_KEY:-}" ] && export EDGEQUAKE_EMBEDDING_API_KEY
+  [ -n "${EDGEQUAKE_EMBEDDING_BASE_URL:-}" ] && export EDGEQUAKE_EMBEDDING_BASE_URL
 
   ui_info "Pulling images (version: ${EDGEQUAKE_VERSION})..."
   $COMPOSE_CMD -f "$COMPOSE_FILE" pull
@@ -635,16 +1181,20 @@ print_summary() {
   printf "  Swagger:   ${C_BOLD}http://localhost:${EDGEQUAKE_PORT}/swagger-ui${C_RESET}\n"
   printf "  Health:    ${C_BOLD}http://localhost:${EDGEQUAKE_PORT}/health${C_RESET}\n\n"
 
-  if [ "$LLM_PROVIDER" = "openai" ]; then
-    printf "  Provider:  ${C_BOLD}OpenAI${C_RESET}\n"
-  else
-    printf "  Provider:  ${C_BOLD}Ollama${C_RESET}\n"
-  fi
-  printf "  LLM:       ${C_BOLD}%s${C_RESET}\n"   "$LLM_MODEL"
-  printf "  Embedding: ${C_BOLD}%s${C_RESET}\n\n"  "$EMBED_MODEL"
+  printf "  LLM:       ${C_BOLD}%s / %s${C_RESET}\n" "$(_provider_label "$LLM_PROVIDER")" "$LLM_MODEL"
+  printf "  Embedding: ${C_BOLD}%s / %s${C_RESET}  (${EMBED_DIMENSION} dims)\n" \
+    "$(_provider_label "$EMBED_PROVIDER")" "$EMBED_MODEL"
+  printf "  Vision:    ${C_BOLD}%s / %s${C_RESET}\n\n" \
+    "$(_provider_label "$VISION_PROVIDER")" "$VISION_MODEL"
 
-  if [ "$LLM_PROVIDER" = "ollama" ]; then
-    printf "  ${C_YELLOW}->  If not done yet: ${C_BOLD}ollama pull %s${C_RESET}\n\n" "$LLM_MODEL"
+  if [ "$LLM_PROVIDER" = "ollama" ] || [ "$EMBED_PROVIDER" = "ollama" ] || [ "$VISION_PROVIDER" = "ollama" ]; then
+    printf "  ${C_YELLOW}->  If needed, pull Ollama models before ingestion:${C_RESET}\n"
+    [ "$LLM_PROVIDER" = "ollama" ] && printf "       ollama pull %s\n" "$LLM_MODEL"
+    [ "$EMBED_PROVIDER" = "ollama" ] && printf "       ollama pull %s\n" "$EMBED_MODEL"
+    if [ "$VISION_PROVIDER" = "ollama" ] && [ "$VISION_MODEL" != "$LLM_MODEL" ]; then
+      printf "       ollama pull %s\n" "$VISION_MODEL"
+    fi
+    printf "\n"
   fi
 
   printf "  ${C_BOLD}Next steps:${C_RESET}\n"
@@ -663,7 +1213,6 @@ main() {
   check_prerequisites
   download_compose
   handle_existing_install
-  choose_provider
   choose_models
   validate_provider
   start_stack

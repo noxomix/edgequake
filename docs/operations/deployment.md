@@ -17,8 +17,8 @@ This guide covers deploying EdgeQuake in production environments, from single-se
 
 ```bash
 # Clone repo (or just download the compose file)
-git clone https://github.com/raphaelmansuy/edgequake.git
-cd edgequake
+git clone https://github.com/noxomix/edgequake-fork.git
+cd edgequake-fork
 
 # Pull images and start all services
 make stack

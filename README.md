@@ -143,7 +143,7 @@ See [mcp/](mcp/) for server implementation details.
 
 ```bash
 # Download and run the interactive setup wizard
-curl -fsSL https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main/quickstart.sh | sh
+curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake-fork/edgequake-main/quickstart.sh | sh
 ```
 
 The wizard guides you through:
@@ -158,14 +158,14 @@ The wizard guides you through:
 Or with `docker compose` directly (pipe to compose):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main/docker-compose.quickstart.yml \
+curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake-fork/edgequake-main/docker-compose.quickstart.yml \
   | docker compose -f - up -d
 ```
 
 Or download the compose file first, then start:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raphaelmansuy/edgequake/edgequake-main/docker-compose.quickstart.yml \
+curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake-fork/edgequake-main/docker-compose.quickstart.yml \
   -o docker-compose.quickstart.yml
 docker compose -f docker-compose.quickstart.yml up -d
 ```
@@ -200,7 +200,7 @@ docker compose -f docker-compose.quickstart.yml ps         # check status
 docker compose -f docker-compose.quickstart.yml down       # stop
 ```
 
-> **Pinned version:** `EDGEQUAKE_VERSION=0.10.8 sh quickstart.sh` to use a specific release.
+> **Pinned version:** `EDGEQUAKE_VERSION=0.10.8 sh quickstart.sh` to use a specific image release.
 
 > Production auth/runtime deployment guidance is available in [docs/operations/runtime-auth-hardening.md](docs/operations/runtime-auth-hardening.md).
 
@@ -219,8 +219,8 @@ docker compose -f docker-compose.quickstart.yml down       # stop
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/raphaelmansuy/edgequake.git
-cd edgequake
+git clone https://github.com/noxomix/edgequake-fork.git
+cd edgequake-fork
 
 # 2. Install dependencies
 make install
@@ -506,13 +506,13 @@ EdgeQuake ships a production-ready multi-arch Docker image published to **GitHub
 
 ```bash
 # Pull latest release — architecture is selected automatically
-docker pull ghcr.io/raphaelmansuy/edgequake:latest
+docker pull ghcr.io/noxomix/edgequake:latest
 
 # Pin to a specific version
-docker pull ghcr.io/raphaelmansuy/edgequake:0.10.8
+docker pull ghcr.io/noxomix/edgequake:0.10.8
 ```
 
-> **First-time package visibility:** After the first CI/CD publish, you may need to set the GHCR package visibility to **Public** under [GitHub → Your Profile → Packages → edgequake → Package Settings → Change Visibility](https://github.com/raphaelmansuy?tab=packages). Once public, `docker pull` works without authentication.
+> **First-time package visibility:** After the first CI/CD publish, set each GHCR package in the `noxomix` namespace to **Public** under GitHub Packages if it is not already public. Otherwise `docker pull` will require authentication.
 
 Three deployment options are available depending on your setup:
 
@@ -531,7 +531,7 @@ docker run -d \
   -e DATABASE_URL="postgres://user:password@your-db-host:5432/edgequake" \
   -e EDGEQUAKE_LLM_PROVIDER=openai \
   -e OPENAI_API_KEY="sk-..." \
-  ghcr.io/raphaelmansuy/edgequake:latest
+  ghcr.io/noxomix/edgequake:latest
 
 # Verify
 curl http://localhost:8080/health
@@ -562,9 +562,9 @@ Services started:
 
 | Service         | Port | Image                                             |
 | --------------- | ---- | ------------------------------------------------- |
-| `edgequake` API | 8080 | `ghcr.io/raphaelmansuy/edgequake:latest`          |
-| `frontend`      | 3000 | `ghcr.io/raphaelmansuy/edgequake-frontend:latest` |
-| `postgres`      | 5432 | `ghcr.io/raphaelmansuy/edgequake-postgres:latest` |
+| `edgequake` API | 8080 | `ghcr.io/noxomix/edgequake:latest`          |
+| `frontend`      | 3000 | `ghcr.io/noxomix/edgequake-frontend:latest` |
+| `postgres`      | 5432 | `ghcr.io/noxomix/edgequake-postgres:latest` |
 
 ```bash
 # Use a specific API version
@@ -620,11 +620,12 @@ All compose files read from a `.env` file placed in the same directory. Copy `ed
 | ------------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------- |
 | `DATABASE_URL`                 | *(set by compose in full-stack)*    | PostgreSQL connection string                                                            |
 | `EDGEQUAKE_LLM_PROVIDER`       | `ollama`                            | LLM provider: `openai`, `anthropic`, `gemini`, `mistral`, `azure`, `vertexai`, `ollama` |
-| `EDGEQUAKE_EMBEDDING_PROVIDER` | *(same as LLM)*                     | Separate embedding provider for hybrid mode                                             |
+| `EDGEQUAKE_EMBEDDING_PROVIDER` | *(same as LLM)*                     | Separate embedding provider for hybrid mode, including `scaleway`                       |
 | `OPENAI_API_KEY`               | —                                   | Required for `openai` / `azure`                                                         |
 | `ANTHROPIC_API_KEY`            | —                                   | Required for `anthropic`                                                                |
 | `GEMINI_API_KEY`               | —                                   | Required for `gemini`                                                                   |
 | `MISTRAL_API_KEY`              | —                                   | Required for `mistral`                                                                  |
+| `SCW_SECRET_KEY`               | —                                   | Required for Scaleway embeddings                                                        |
 | `AZURE_OPENAI_API_KEY`         | —                                   | Required for `azure`                                                                    |
 | `AZURE_OPENAI_ENDPOINT`        | —                                   | Azure resource endpoint URL                                                             |
 | `GOOGLE_CLOUD_PROJECT`         | —                                   | Required for `vertexai`                                                                 |
@@ -683,7 +684,7 @@ Docker images are built and published automatically via GitHub Actions (`.github
 git tag v0.10.8 && git push origin v0.10.8
 ```
 
-Both `linux/amd64` (ubuntu-latest runner) and `linux/arm64` (native ARM64 runner — no QEMU) are built in parallel and merged into a single multi-arch manifest. The same image tag (`ghcr.io/raphaelmansuy/edgequake:0.10.8`) works on x86 servers, Apple Silicon Macs, and AWS Graviton instances.
+Both `linux/amd64` (ubuntu-latest runner) and `linux/arm64` (native ARM64 runner — no QEMU) are built in parallel and merged into a single multi-arch manifest. The same image tag (`ghcr.io/noxomix/edgequake:0.10.8`) works on x86 servers, Apple Silicon Macs, and AWS Graviton instances.
 
 You can also trigger a manual Docker build + publish without a tag via the `workflow_dispatch` input on GitHub Actions (`Actions → Release — Docker (GHCR) → Run workflow`).
 

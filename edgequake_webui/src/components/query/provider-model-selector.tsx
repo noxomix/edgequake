@@ -73,6 +73,8 @@ function getProviderIcon(providerId: string) {
   switch (providerId.toLowerCase()) {
     case 'openai':
       return <Cloud className="h-4 w-4 text-green-600" />;
+    case 'scaleway':
+      return <Cloud className="h-4 w-4 text-sky-600" />;
     case 'ollama':
       return <Cpu className="h-4 w-4 text-blue-600" />;
     case 'lmstudio':
