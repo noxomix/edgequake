@@ -3,7 +3,7 @@
 # Fork note: adapted in this fork to download install assets from the fork by default.
 #
 # Usage (no git clone required):
-#   curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake-fork/edgequake-main/quickstart.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake/edgequake-main/quickstart.sh | sh
 #
 # Or with a pinned version:
 #   EDGEQUAKE_VERSION=0.10.6 curl -fsSL ... | sh
@@ -22,7 +22,7 @@ EDGEQUAKE_PORT="${EDGEQUAKE_PORT:-8080}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.quickstart.yml}"
 EDGEQUAKE_INSTALL_REPO_OWNER="${EDGEQUAKE_INSTALL_REPO_OWNER:-noxomix}"
-EDGEQUAKE_INSTALL_REPO_NAME="${EDGEQUAKE_INSTALL_REPO_NAME:-edgequake-fork}"
+EDGEQUAKE_INSTALL_REPO_NAME="${EDGEQUAKE_INSTALL_REPO_NAME:-edgequake}"
 EDGEQUAKE_INSTALL_REF="${EDGEQUAKE_INSTALL_REF:-edgequake-main}"
 RAW_BASE="https://raw.githubusercontent.com/${EDGEQUAKE_INSTALL_REPO_OWNER}/${EDGEQUAKE_INSTALL_REPO_NAME}/${EDGEQUAKE_INSTALL_REF}"
 

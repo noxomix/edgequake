@@ -54,7 +54,7 @@ jobs:
           file: edgequake/docker/Dockerfile
           push: true
           platforms: linux/amd64
-          tags: ghcr.io/${{ github.repository_owner }}/edgequake:${{ needs.meta.outputs.version }}-amd64
+          tags: ghcr.io/noxomix/edgequake:${{ needs.meta.outputs.version }}-amd64
           cache-from: type=gha,scope=amd64
           cache-to:   type=gha,scope=amd64,mode=max
 
@@ -80,7 +80,7 @@ jobs:
           file: edgequake/docker/Dockerfile
           push: true
           platforms: linux/arm64
-          tags: ghcr.io/${{ github.repository_owner }}/edgequake:${{ needs.meta.outputs.version }}-arm64
+          tags: ghcr.io/noxomix/edgequake:${{ needs.meta.outputs.version }}-arm64
           cache-from: type=gha,scope=arm64
           cache-to:   type=gha,scope=arm64,mode=max
 
@@ -97,7 +97,7 @@ jobs:
 
       - name: Create and push multi-arch manifest
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/edgequake
+          IMAGE: ghcr.io/noxomix/edgequake
           VERSION: ${{ needs.meta.outputs.version }}
         run: |
           docker buildx imagetools create \
@@ -109,7 +109,7 @@ jobs:
       - name: Inspect final manifest
         run: |
           docker buildx imagetools inspect \
-            "ghcr.io/${{ github.repository_owner }}/edgequake:${{ needs.meta.outputs.version }}"
+            "ghcr.io/noxomix/edgequake:${{ needs.meta.outputs.version }}"
 
   # ── Build frontend amd64 — native ubuntu-latest runner ────────────────────────
   build-frontend-amd64:
@@ -137,7 +137,7 @@ jobs:
           # where both containers run on the same host and the browser connects to port 8080 directly.
           build-args: |
             NEXT_PUBLIC_API_URL=http://localhost:8080
-          tags: ghcr.io/${{ github.repository_owner }}/edgequake-frontend:${{ needs.meta.outputs.version }}-amd64
+          tags: ghcr.io/noxomix/edgequake-frontend:${{ needs.meta.outputs.version }}-amd64
           cache-from: type=gha,scope=frontend-amd64
           cache-to:   type=gha,scope=frontend-amd64,mode=max
 
@@ -165,7 +165,7 @@ jobs:
           platforms: linux/arm64
           build-args: |
             NEXT_PUBLIC_API_URL=http://localhost:8080
-          tags: ghcr.io/${{ github.repository_owner }}/edgequake-frontend:${{ needs.meta.outputs.version }}-arm64
+          tags: ghcr.io/noxomix/edgequake-frontend:${{ needs.meta.outputs.version }}-arm64
           cache-from: type=gha,scope=frontend-arm64
           cache-to:   type=gha,scope=frontend-arm64,mode=max
 
@@ -182,7 +182,7 @@ jobs:
 
       - name: Create and push frontend multi-arch manifest
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/edgequake-frontend
+          IMAGE: ghcr.io/noxomix/edgequake-frontend
           VERSION: ${{ needs.meta.outputs.version }}
         run: |
           docker buildx imagetools create \
@@ -193,7 +193,7 @@ jobs:
 
       - name: Inspect frontend manifest
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/edgequake-frontend
+          IMAGE: ghcr.io/noxomix/edgequake-frontend
           VERSION: ${{ needs.meta.outputs.version }}
         run: |
           docker buildx imagetools inspect "$IMAGE:$VERSION"
@@ -222,7 +222,7 @@ jobs:
           file: edgequake/docker/Dockerfile.postgres
           push: true
           platforms: linux/amd64
-          tags: ghcr.io/${{ github.repository_owner }}/edgequake-postgres:${{ needs.meta.outputs.version }}-amd64
+          tags: ghcr.io/noxomix/edgequake-postgres:${{ needs.meta.outputs.version }}-amd64
           cache-from: type=gha,scope=postgres-amd64
           cache-to:   type=gha,scope=postgres-amd64,mode=max
 
@@ -248,7 +248,7 @@ jobs:
           file: edgequake/docker/Dockerfile.postgres
           push: true
           platforms: linux/arm64
-          tags: ghcr.io/${{ github.repository_owner }}/edgequake-postgres:${{ needs.meta.outputs.version }}-arm64
+          tags: ghcr.io/noxomix/edgequake-postgres:${{ needs.meta.outputs.version }}-arm64
           cache-from: type=gha,scope=postgres-arm64
           cache-to:   type=gha,scope=postgres-arm64,mode=max
 
@@ -265,7 +265,7 @@ jobs:
 
       - name: Create and push postgres multi-arch manifest
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/edgequake-postgres
+          IMAGE: ghcr.io/noxomix/edgequake-postgres
           VERSION: ${{ needs.meta.outputs.version }}
         run: |
           docker buildx imagetools create \
@@ -276,7 +276,7 @@ jobs:
 
       - name: Inspect postgres manifest
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/edgequake-postgres
+          IMAGE: ghcr.io/noxomix/edgequake-postgres
           VERSION: ${{ needs.meta.outputs.version }}
         run: |
           docker buildx imagetools inspect "$IMAGE:$VERSION"
@@ -300,12 +300,12 @@ jobs:
 
           \`\`\`bash
           # Interactive one-command install (Docker only, no git clone)
-          curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${TAG}/quickstart.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake/${TAG}/quickstart.sh | sh
           \`\`\`
 
           Or with plain Docker Compose:
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${TAG}/docker-compose.quickstart.yml \\
+          curl -fsSL https://raw.githubusercontent.com/noxomix/edgequake/${TAG}/docker-compose.quickstart.yml \\
             -o docker-compose.quickstart.yml
           docker compose -f docker-compose.quickstart.yml up -d
           # → Web UI:  http://localhost:3000
@@ -324,18 +324,18 @@ jobs:
 
           | Image | Architecture |
           |-------|-------------|
-          | \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/edgequake:${VERSION}\` | linux/amd64, linux/arm64 |
-          | \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/edgequake-frontend:${VERSION}\` | linux/amd64, linux/arm64 |
-          | \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/edgequake-postgres:${VERSION}\` | linux/amd64, linux/arm64 |
+          | \`ghcr.io/noxomix/edgequake:${VERSION}\` | linux/amd64, linux/arm64 |
+          | \`ghcr.io/noxomix/edgequake-frontend:${VERSION}\` | linux/amd64, linux/arm64 |
+          | \`ghcr.io/noxomix/edgequake-postgres:${VERSION}\` | linux/amd64, linux/arm64 |
 
-          Full CHANGELOG: https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/CHANGELOG.md"
+          Full CHANGELOG: https://github.com/noxomix/edgequake/blob/${TAG}/CHANGELOG.md"
 
           gh release create "$TAG" \
             --title "EdgeQuake $TAG" \
             --notes "$NOTES" \
-            --repo "$GITHUB_REPOSITORY" \
+            --repo "noxomix/edgequake" \
             2>/dev/null || \
           gh release edit "$TAG" \
             --title "EdgeQuake $TAG" \
             --notes "$NOTES" \
-            --repo "$GITHUB_REPOSITORY"
+            --repo "noxomix/edgequake"
