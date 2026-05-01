@@ -134,7 +134,7 @@ services:
     networks:
       - edgequake
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://0.0.0.0:8080/health"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -149,6 +149,7 @@ services:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
+      HOST: 0.0.0.0
       # WHY EDGEQUAKE_API_URL (not NEXT_PUBLIC_API_URL):
       # NEXT_PUBLIC_* variables are baked into the JS bundle at image build time
       # and cannot be changed at container startup. EDGEQUAKE_API_URL is read at
@@ -156,19 +157,21 @@ services:
       # and injected into window.__EDGEQUAKE_RUNTIME_CONFIG__ so the browser picks
       # it up correctly — no rebuild required.
       #
-      # Default: http://localhost:${EDGEQUAKE_PORT:-8080} — the URL the user's
-      # browser uses to reach the API (same host, host-mapped port).
+      # Default: uses the detected public host IP for CORS-compatible remote access.
+      # Falls back to localhost for pure local development.
       #
-      # Override for remote/non-localhost access:
+      # Override for custom host/IP:
       #   EDGEQUAKE_API_URL=http://192.168.1.10:8080 docker compose ... up -d
-      EDGEQUAKE_API_URL:  ${EDGEQUAKE_API_URL:-http://localhost:${EDGEQUAKE_PORT:-8080}}
+      # For local development only, explicitly set:
+      #   EDGEQUAKE_API_URL=http://localhost:${EDGEQUAKE_PORT:-8080} docker compose ... up -d
+      EDGEQUAKE_API_URL:  ${EDGEQUAKE_API_URL:-http://${EDGEQUAKE_PUBLIC_HOST:-0.0.0.0}:${EDGEQUAKE_PORT:-8080}}
     depends_on:
       api:
         condition: service_healthy
     networks:
       - edgequake
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://0.0.0.0:3000"]
       interval: 20s
       timeout: 10s
       retries: 3

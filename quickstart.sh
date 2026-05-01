@@ -1137,6 +1137,25 @@ start_stack() {
   [ -n "${EDGEQUAKE_EMBEDDING_API_KEY:-}" ] && export EDGEQUAKE_EMBEDDING_API_KEY
   [ -n "${EDGEQUAKE_EMBEDDING_BASE_URL:-}" ] && export EDGEQUAKE_EMBEDDING_BASE_URL
 
+  # Ensure services bind to all interfaces for remote access
+  export HOST=0.0.0.0
+  
+  # Set public host for CORS-compatible API URL in frontend
+  if [ -z "$EDGEQUAKE_PUBLIC_HOST" ]; then
+    EDGEQUAKE_PUBLIC_HOST=$(hostname -I 2>/dev/null | awk '{print $1}' || \
+                          hostname -i 2>/dev/null || \
+                          ip route get 1 2>/dev/null | awk '{print $7}' | tr -d '\\n' || \
+                          echo "0.0.0.0")
+    case "$EDGEQUAKE_PUBLIC_HOST" in
+      localhost|127.0.0.1|127.*.*.*|::1)
+        EDGEQUAKE_PUBLIC_HOST=$(ip -4 addr show scope global 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1 || \
+                             ifconfig 2>/dev/null | grep -oE 'inet ([0-9]{1,3}\.\.){3}[0-9]{1,3}' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' || \
+                             echo "localhost")
+        ;;
+    esac
+  fi
+  export EDGEQUAKE_PUBLIC_HOST
+
   # Write .env file for persistent configuration
   ui_info "Writing configuration to .env file..."
   cat > .env << INNER_EOF
@@ -1185,6 +1204,13 @@ EDGEQUAKE_IMAGE_NAMESPACE=${EDGEQUAKE_IMAGE_NAMESPACE:-noxomix}
 # Database Configuration
 # =============================================================================
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-edgequake_secret}
+
+# =============================================================================
+# Network Binding Configuration
+# =============================================================================
+HOST=0.0.0.0
+EDGEQUAKE_PUBLIC_HOST=${EDGEQUAKE_PUBLIC_HOST}
+EDGEQUAKE_API_URL=http://${EDGEQUAKE_PUBLIC_HOST:-0.0.0.0}:${EDGEQUAKE_PORT}
 INNER_EOF
 
   # Write API keys to .env if they were provided
@@ -1237,15 +1263,19 @@ INNER_EOF
 # § Step 8 — Success summary
 # ════════════════════════════════════════════════════════════════════════════
 print_summary() {
+  # Use the already detected/existing public host
+  PUBLIC_HOST="${EDGEQUAKE_PUBLIC_HOST:-localhost}"
+
   printf "\n${C_BOLD}${C_GREEN}"
   printf "  ══════════════════════════════════════════\n"
   printf "  EdgeQuake is running!\n"
   printf "  ══════════════════════════════════════════${C_RESET}\n\n"
 
-  printf "  Web UI:    ${C_BOLD}http://localhost:${FRONTEND_PORT}${C_RESET}\n"
-  printf "  API:       ${C_BOLD}http://localhost:${EDGEQUAKE_PORT}${C_RESET}\n"
-  printf "  Swagger:   ${C_BOLD}http://localhost:${EDGEQUAKE_PORT}/swagger-ui${C_RESET}\n"
-  printf "  Health:    ${C_BOLD}http://localhost:${EDGEQUAKE_PORT}/health${C_RESET}\n\n"
+  printf "  Web UI:    ${C_BOLD}http://${PUBLIC_HOST}:${FRONTEND_PORT}${C_RESET}\n"
+  printf "  API:       ${C_BOLD}http://${PUBLIC_HOST}:${EDGEQUAKE_PORT}${C_RESET}\n"
+  printf "  Swagger:   ${C_BOLD}http://${PUBLIC_HOST}:${EDGEQUAKE_PORT}/swagger-ui${C_RESET}\n"
+  printf "  Health:    ${C_BOLD}http://${PUBLIC_HOST}:${EDGEQUAKE_PORT}/health${C_RESET}\n\n"
+  printf "  ${C_DIM}(Accessible from all network interfaces)${C_RESET}\n\n"
 
   printf "  LLM:       ${C_BOLD}%s / %s${C_RESET}\n" "$(_provider_label "$LLM_PROVIDER")" "$LLM_MODEL"
   printf "  Embedding: ${C_BOLD}%s / %s${C_RESET}  (${EMBED_DIMENSION} dims)\n" \
@@ -1264,10 +1294,10 @@ print_summary() {
   fi
 
   printf "  ${C_BOLD}Next steps:${C_RESET}\n"
-  printf "    1. Open ${C_BOLD}http://localhost:${FRONTEND_PORT}${C_RESET} in your browser\n"
+  printf "    1. Open ${C_BOLD}http://${PUBLIC_HOST}:${FRONTEND_PORT}${C_RESET} in your browser\n"
   printf "    2. Upload a PDF or paste text to build your knowledge graph\n"
-  printf "    3. Ask questions — EdgeQuake retrieves graph-aware answers\n\n"
-
+  printf "    3. Ask questions — EdgeQuake retrieves graph-aware answers\n"
+  printf "    4. For remote access, use the IP address shown above\n\n"
   _print_mgmt_footer
 }
 

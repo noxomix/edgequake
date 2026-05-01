@@ -81,6 +81,7 @@ services:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:
       - NODE_ENV=production
+      - HOST=0.0.0.0
     depends_on:
       edgequake:
         condition: service_healthy
